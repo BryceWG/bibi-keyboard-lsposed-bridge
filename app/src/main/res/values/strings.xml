@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">BiBi IME Bridge</string>
+    <string name="xposed_description">Bridge BiBi floating ASR results into the hooked input method via InputConnection.</string>
+</resources>

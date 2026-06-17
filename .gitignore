@@ -1,0 +1,17 @@
+# Local SDK and IDE files.
+local.properties
+.idea/
+
+# Gradle state and build outputs.
+.gradle/
+build/
+app/build/
+
+# Packaged artifacts should be attached to releases, not committed.
+*.apk
+*.aab
+*.ap_
+
+# Misc local output.
+captures/
+*.log
