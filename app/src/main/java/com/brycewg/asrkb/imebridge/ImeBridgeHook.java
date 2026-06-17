@@ -12,8 +12,6 @@ import android.content.IntentFilter;
 import android.inputmethodservice.InputMethodService;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.InputType;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -31,10 +29,10 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final String TAG = "BiBiImeBridge";
     private static final Map<InputMethodService, BridgeReceiver> RECEIVERS = new WeakHashMap<>();
-    private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private static WeakReference<InputMethodService> activeServiceRef = new WeakReference<>(null);
     private static EditorInfo activeEditorInfo;
+    private static boolean imeWindowVisible;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -45,6 +43,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
 
         try {
+            XposedBridge.log(TAG + ": module " + BridgeContract.MODULE_VERSION +
+                " loading for " + lpparam.packageName);
             hookInputMethodService(lpparam.packageName);
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": failed to install hooks for " + lpparam.packageName + ": " + t);
@@ -75,6 +75,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     activeEditorInfo = param.args != null && param.args.length > 0
                         ? (EditorInfo) param.args[0]
                         : null;
+                    imeWindowVisible = safeIsInputViewShown(service);
                     registerBridgeReceiver(service, packageName);
                 }
             }
@@ -90,6 +91,30 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
         });
 
+        XposedHelpers.findAndHookMethod(InputMethodService.class, "onWindowShown", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                InputMethodService service = asImeService(param.thisObject);
+                if (service == null) return;
+                activeServiceRef = new WeakReference<>(service);
+                imeWindowVisible = true;
+                registerBridgeReceiver(service, packageName);
+                sendImeWindowVisibility(service, packageName, true);
+            }
+        });
+
+        XposedHelpers.findAndHookMethod(InputMethodService.class, "onWindowHidden", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                InputMethodService service = asImeService(param.thisObject);
+                if (service == null) return;
+                if (service == activeServiceRef.get()) {
+                    imeWindowVisible = false;
+                }
+                sendImeWindowVisibility(service, packageName, false);
+            }
+        });
+
         XposedHelpers.findAndHookMethod(InputMethodService.class, "onDestroy", new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
@@ -99,6 +124,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 if (service == activeServiceRef.get()) {
                     activeServiceRef = new WeakReference<>(null);
                     activeEditorInfo = null;
+                    imeWindowVisible = false;
                 }
             }
         });
@@ -120,11 +146,11 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     receiver,
                     filter,
                     BridgeContract.PERMISSION,
-                    MAIN,
+                    null,
                     Context.RECEIVER_EXPORTED
                 );
             } else {
-                service.registerReceiver(receiver, filter, BridgeContract.PERMISSION, MAIN);
+                service.registerReceiver(receiver, filter, BridgeContract.PERMISSION, null);
             }
             RECEIVERS.put(service, receiver);
             XposedBridge.log(TAG + ": receiver registered for " + packageName);
@@ -140,6 +166,35 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             service.unregisterReceiver(receiver);
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": failed to unregister receiver: " + t);
+        }
+    }
+
+    private static void sendImeWindowVisibility(Context context, String packageName, boolean visible) {
+        if (context == null) return;
+        try {
+            Intent intent = new Intent(BridgeContract.ACTION_IME_WINDOW_VISIBILITY_CHANGED);
+            intent.setPackage(BridgeContract.MAIN_APP_PACKAGE);
+            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+            intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
+            intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, packageName);
+            intent.putExtra(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, visible);
+            context.sendBroadcast(intent, BridgeContract.PERMISSION);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": failed to send IME visibility: " + t);
+        }
+    }
+
+    private static boolean isImeWindowVisible(InputMethodService service) {
+        return imeWindowVisible || safeIsInputViewShown(service);
+    }
+
+    private static boolean safeIsInputViewShown(InputMethodService service) {
+        if (service == null) return false;
+        try {
+            return service.isInputViewShown();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": isInputViewShown failed: " + t);
+            return false;
         }
     }
 
@@ -179,6 +234,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             extras.putString(BridgeContract.EXTRA_TARGET_PACKAGE, packageName);
             extras.putBoolean(BridgeContract.EXTRA_HAS_INPUT_CONNECTION, inputConnection != null);
             extras.putBoolean(BridgeContract.EXTRA_IS_SENSITIVE_FIELD, isSensitiveField(activeEditorInfo));
+            extras.putBoolean(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, isImeWindowVisible(service));
             setResultExtras(extras);
             finish(BridgeContract.RESULT_OK, "ready");
         }

@@ -23,5 +23,9 @@ be attached to bridge-module releases instead of being committed to either repo.
 The module hooks `InputMethodService`, receives requests from the BiBi app, and
 submits final ASR text through `InputConnection.commitText()`.
 
+It also reports whether the hooked input method panel is currently visible, so
+the main app can show or hide the floating ball without relying on Accessibility
+for keyboard visibility detection.
+
 It does not read user input, inject UI into the third-party keyboard, or handle
 recording / ASR / post-processing.
