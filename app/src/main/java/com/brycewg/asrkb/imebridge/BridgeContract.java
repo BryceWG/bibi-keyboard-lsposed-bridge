@@ -7,12 +7,16 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.1.1";
+    static final String MODULE_VERSION = "0.1.2";
 
     static final String MAIN_APP_PACKAGE = "com.brycewg.asrkb";
     static final String PERMISSION = "com.brycewg.asrkb.permission.IME_BRIDGE";
     static final String ACTION_QUERY_STATUS = "com.brycewg.asrkb.imebridge.action.QUERY_STATUS";
     static final String ACTION_INSERT_TEXT = "com.brycewg.asrkb.imebridge.action.INSERT_TEXT";
+    static final String ACTION_SET_COMPOSING_TEXT =
+        "com.brycewg.asrkb.imebridge.action.SET_COMPOSING_TEXT";
+    static final String ACTION_FINISH_COMPOSING_TEXT =
+        "com.brycewg.asrkb.imebridge.action.FINISH_COMPOSING_TEXT";
     static final String ACTION_IME_WINDOW_VISIBILITY_CHANGED =
         "com.brycewg.asrkb.imebridge.action.IME_WINDOW_VISIBILITY_CHANGED";
 
@@ -24,6 +28,7 @@ final class BridgeContract {
     static final String EXTRA_HAS_INPUT_CONNECTION = "has_input_connection";
     static final String EXTRA_IS_SENSITIVE_FIELD = "is_sensitive_field";
     static final String EXTRA_IME_WINDOW_VISIBLE = "ime_window_visible";
+    static final String EXTRA_SUPPORTS_COMPOSING_PREVIEW = "supports_composing_preview";
     static final String EXTRA_MESSAGE = "message";
 
     static final int RESULT_OK = 1;
@@ -34,6 +39,7 @@ final class BridgeContract {
     static final int RESULT_SENSITIVE_FIELD = -5;
     static final int RESULT_COMMIT_FAILED = -6;
     static final int RESULT_BAD_REQUEST = -7;
+    static final int RESULT_COMPOSING_FAILED = -8;
 
     private BridgeContract() {
     }

@@ -71,12 +71,16 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 protected void afterHookedMethod(MethodHookParam param) {
                     InputMethodService service = asImeService(param.thisObject);
                     if (service == null) return;
+                    boolean restarting = param.args != null &&
+                        param.args.length > 1 &&
+                        Boolean.TRUE.equals(param.args[1]);
                     activeServiceRef = new WeakReference<>(service);
                     activeEditorInfo = param.args != null && param.args.length > 0
                         ? (EditorInfo) param.args[0]
                         : null;
                     imeWindowVisible = safeIsInputViewShown(service);
                     registerBridgeReceiver(service, packageName);
+                    if (!restarting) resetBridgeReceiverPreview(service);
                 }
             }
         );
@@ -85,6 +89,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 InputMethodService service = asImeService(param.thisObject);
+                resetBridgeReceiverPreview(service);
                 if (service != null && service == activeServiceRef.get()) {
                     activeEditorInfo = null;
                 }
@@ -120,6 +125,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             protected void beforeHookedMethod(MethodHookParam param) {
                 InputMethodService service = asImeService(param.thisObject);
                 if (service == null) return;
+                resetBridgeReceiverPreview(service);
                 unregisterBridgeReceiver(service);
                 if (service == activeServiceRef.get()) {
                     activeServiceRef = new WeakReference<>(null);
@@ -140,6 +146,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BridgeContract.ACTION_QUERY_STATUS);
         filter.addAction(BridgeContract.ACTION_INSERT_TEXT);
+        filter.addAction(BridgeContract.ACTION_SET_COMPOSING_TEXT);
+        filter.addAction(BridgeContract.ACTION_FINISH_COMPOSING_TEXT);
         try {
             if (Build.VERSION.SDK_INT >= 33) {
                 service.registerReceiver(
@@ -167,6 +175,11 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": failed to unregister receiver: " + t);
         }
+    }
+
+    private static synchronized void resetBridgeReceiverPreview(InputMethodService service) {
+        BridgeReceiver receiver = RECEIVERS.get(service);
+        if (receiver != null) receiver.resetComposingPreviewState();
     }
 
     private static void sendImeWindowVisibility(Context context, String packageName, boolean visible) {
@@ -200,6 +213,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
     private static final class BridgeReceiver extends BroadcastReceiver {
         private final String packageName;
+        private boolean composingPreviewActive;
+        private String composingEditorPackageName;
+        private int composingEditorFieldId;
+        private int composingEditorInputType;
 
         BridgeReceiver(String packageName) {
             this.packageName = packageName;
@@ -222,6 +239,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 handleQueryStatus();
             } else if (BridgeContract.ACTION_INSERT_TEXT.equals(action)) {
                 handleInsertText(intent);
+            } else if (BridgeContract.ACTION_SET_COMPOSING_TEXT.equals(action)) {
+                handleSetComposingText(intent);
+            } else if (BridgeContract.ACTION_FINISH_COMPOSING_TEXT.equals(action)) {
+                handleFinishComposingText();
             } else {
                 finish(BridgeContract.RESULT_BAD_REQUEST, "unknown action");
             }
@@ -235,6 +256,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             extras.putBoolean(BridgeContract.EXTRA_HAS_INPUT_CONNECTION, inputConnection != null);
             extras.putBoolean(BridgeContract.EXTRA_IS_SENSITIVE_FIELD, isSensitiveField(activeEditorInfo));
             extras.putBoolean(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, isImeWindowVisible(service));
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_COMPOSING_PREVIEW, true);
             setResultExtras(extras);
             finish(BridgeContract.RESULT_OK, "ready");
         }
@@ -265,12 +287,91 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             int cursorPosition = intent.getIntExtra(BridgeContract.EXTRA_CURSOR_POSITION, 1);
             boolean ok;
             try {
-                ok = inputConnection.commitText(value, cursorPosition);
+                if (composingPreviewActive) {
+                    if (isComposingPreviewForActiveEditor()) {
+                        ok = inputConnection.setComposingText(value, cursorPosition) &&
+                            inputConnection.finishComposingText();
+                        if (ok) resetComposingPreviewState();
+                    } else {
+                        resetComposingPreviewState();
+                        ok = inputConnection.commitText(value, cursorPosition);
+                    }
+                } else {
+                    ok = inputConnection.commitText(value, cursorPosition);
+                }
             } catch (Throwable t) {
-                XposedBridge.log(TAG + ": commitText failed: " + t);
+                XposedBridge.log(TAG + ": insert text failed: " + t);
                 ok = false;
             }
             finish(ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMMIT_FAILED, ok ? "ok" : "commit failed");
+        }
+
+        private void handleSetComposingText(Intent intent) {
+            CharSequence value = intent.getCharSequenceExtra(BridgeContract.EXTRA_TEXT);
+            if (value == null) value = "";
+            if (isSensitiveField(activeEditorInfo)) {
+                finish(BridgeContract.RESULT_SENSITIVE_FIELD, "sensitive field");
+                return;
+            }
+
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+
+            InputConnection inputConnection = getInputConnection(service);
+            if (inputConnection == null) {
+                finish(BridgeContract.RESULT_NO_INPUT_CONNECTION, "no input connection");
+                return;
+            }
+
+            int cursorPosition = intent.getIntExtra(BridgeContract.EXTRA_CURSOR_POSITION, 1);
+            boolean ok;
+            try {
+                ok = inputConnection.setComposingText(value, cursorPosition);
+                if (ok) {
+                    if (value.length() > 0) {
+                        rememberComposingEditor(activeEditorInfo);
+                    } else {
+                        resetComposingPreviewState();
+                    }
+                }
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": setComposingText failed: " + t);
+                ok = false;
+            }
+            finish(
+                ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMPOSING_FAILED,
+                ok ? "ok" : "set composing failed"
+            );
+        }
+
+        private void handleFinishComposingText() {
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+
+            InputConnection inputConnection = getInputConnection(service);
+            if (inputConnection == null) {
+                finish(BridgeContract.RESULT_NO_INPUT_CONNECTION, "no input connection");
+                return;
+            }
+
+            boolean ok;
+            try {
+                ok = inputConnection.finishComposingText();
+                if (ok) resetComposingPreviewState();
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": finishComposingText failed: " + t);
+                ok = false;
+            }
+            finish(
+                ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMPOSING_FAILED,
+                ok ? "ok" : "finish composing failed"
+            );
         }
 
         private InputConnection getInputConnection(InputMethodService service) {
@@ -281,6 +382,28 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + ": getCurrentInputConnection failed: " + t);
                 return null;
             }
+        }
+
+        private void rememberComposingEditor(EditorInfo editorInfo) {
+            composingPreviewActive = true;
+            composingEditorPackageName = editorInfo != null ? editorInfo.packageName : null;
+            composingEditorFieldId = editorInfo != null ? editorInfo.fieldId : 0;
+            composingEditorInputType = editorInfo != null ? editorInfo.inputType : 0;
+        }
+
+        private boolean isComposingPreviewForActiveEditor() {
+            if (!composingPreviewActive || activeEditorInfo == null) return false;
+            if (composingEditorFieldId != activeEditorInfo.fieldId) return false;
+            if (composingEditorInputType != activeEditorInfo.inputType) return false;
+            if (composingEditorPackageName == null) return activeEditorInfo.packageName == null;
+            return composingEditorPackageName.equals(activeEditorInfo.packageName);
+        }
+
+        void resetComposingPreviewState() {
+            composingPreviewActive = false;
+            composingEditorPackageName = null;
+            composingEditorFieldId = 0;
+            composingEditorInputType = 0;
         }
 
         private boolean isSensitiveField(EditorInfo editorInfo) {

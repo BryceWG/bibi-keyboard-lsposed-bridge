@@ -20,12 +20,17 @@ be attached to bridge-module releases instead of being committed to either repo.
 
 ## Behavior
 
-The module hooks `InputMethodService`, receives requests from the BiBi app, and
-submits final ASR text through `InputConnection.commitText()`.
+The module hooks `InputMethodService`, receives requests from the BiBi app,
+shows streaming ASR preview through `InputConnection.setComposingText()`, and
+submits final ASR text through `InputConnection.commitText()` or by replacing
+the active composing preview and finishing composition.
 
 It also reports whether the hooked input method panel is currently visible, so
 the main app can show or hide the floating ball without relying on Accessibility
 for keyboard visibility detection.
+
+Streaming preview is treated as composing text: it should remain reversible until
+the final result is committed or the session is cancelled.
 
 It does not read user input, inject UI into the third-party keyboard, or handle
 recording / ASR / post-processing.
