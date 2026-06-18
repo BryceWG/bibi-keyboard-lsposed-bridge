@@ -1,0 +1,7 @@
+id=com.brycewg.asrkb.imebridge
+name=BiBi IME Bridge
+version=0.1.3
+versionCode=6
+author=Bryce
+description=Bridge BiBi floating ASR results into hooked input methods through InputConnection.
+minApi=82

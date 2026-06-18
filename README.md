@@ -30,7 +30,19 @@ the main app can show or hide the floating ball without relying on Accessibility
 for keyboard visibility detection.
 
 Streaming preview is treated as composing text: it should remain reversible until
-the final result is committed or the session is cancelled.
+the final result is committed or the session is cancelled. Newer bridge builds
+use a session id for preview, final commit, and cancellation, so stale partial
+results from an old recording session are rejected by the hooked IME side.
+
+The module returns capability metadata such as module version, active input
+connection state, sensitive-field blocking state, IME window visibility,
+composing preview support, and session support. BiBi records decisive bridge
+calls in its existing API log with text length and result codes, not the
+recognized text content.
+
+The APK includes `META-INF/xposed/module.prop` for LSPosed/Xposed module
+metadata. Release update checks still depend on publishing this standalone
+module repository through the chosen release/feed channel.
 
 It does not read user input, inject UI into the third-party keyboard, or handle
 recording / ASR / post-processing.

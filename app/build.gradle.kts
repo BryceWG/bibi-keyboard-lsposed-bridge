@@ -10,8 +10,8 @@ android {
         applicationId = "com.brycewg.asrkb.imebridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.2"
+        versionCode = 6
+        versionName = "0.1.3"
     }
 
     buildTypes {

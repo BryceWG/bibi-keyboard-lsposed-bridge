@@ -146,6 +146,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BridgeContract.ACTION_QUERY_STATUS);
         filter.addAction(BridgeContract.ACTION_INSERT_TEXT);
+        filter.addAction(BridgeContract.ACTION_BEGIN_SESSION);
+        filter.addAction(BridgeContract.ACTION_CANCEL_SESSION);
         filter.addAction(BridgeContract.ACTION_SET_COMPOSING_TEXT);
         filter.addAction(BridgeContract.ACTION_FINISH_COMPOSING_TEXT);
         try {
@@ -179,7 +181,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
     private static synchronized void resetBridgeReceiverPreview(InputMethodService service) {
         BridgeReceiver receiver = RECEIVERS.get(service);
-        if (receiver != null) receiver.resetComposingPreviewState();
+        if (receiver != null) receiver.resetBridgeSessionState();
     }
 
     private static void sendImeWindowVisibility(Context context, String packageName, boolean visible) {
@@ -214,6 +216,11 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final class BridgeReceiver extends BroadcastReceiver {
         private final String packageName;
         private boolean composingPreviewActive;
+        private String activeSessionId;
+        private String currentOperation;
+        private String lastOperation;
+        private int lastResultCode;
+        private String lastError;
         private String composingEditorPackageName;
         private int composingEditorFieldId;
         private int composingEditorInputType;
@@ -235,14 +242,19 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
 
             String action = intent.getAction();
+            currentOperation = action;
             if (BridgeContract.ACTION_QUERY_STATUS.equals(action)) {
                 handleQueryStatus();
+            } else if (BridgeContract.ACTION_BEGIN_SESSION.equals(action)) {
+                handleBeginSession(intent);
+            } else if (BridgeContract.ACTION_CANCEL_SESSION.equals(action)) {
+                handleCancelSession(intent);
             } else if (BridgeContract.ACTION_INSERT_TEXT.equals(action)) {
                 handleInsertText(intent);
             } else if (BridgeContract.ACTION_SET_COMPOSING_TEXT.equals(action)) {
                 handleSetComposingText(intent);
             } else if (BridgeContract.ACTION_FINISH_COMPOSING_TEXT.equals(action)) {
-                handleFinishComposingText();
+                handleFinishComposingText(intent);
             } else {
                 finish(BridgeContract.RESULT_BAD_REQUEST, "unknown action");
             }
@@ -252,16 +264,64 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             InputMethodService service = activeServiceRef.get();
             InputConnection inputConnection = getInputConnection(service);
             Bundle extras = new Bundle();
-            extras.putString(BridgeContract.EXTRA_TARGET_PACKAGE, packageName);
-            extras.putBoolean(BridgeContract.EXTRA_HAS_INPUT_CONNECTION, inputConnection != null);
-            extras.putBoolean(BridgeContract.EXTRA_IS_SENSITIVE_FIELD, isSensitiveField(activeEditorInfo));
-            extras.putBoolean(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, isImeWindowVisible(service));
-            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_COMPOSING_PREVIEW, true);
+            fillStatusExtras(extras, service, inputConnection);
             setResultExtras(extras);
             finish(BridgeContract.RESULT_OK, "ready");
         }
 
+        private void handleBeginSession(Intent intent) {
+            String sessionId = intent.getStringExtra(BridgeContract.EXTRA_SESSION_ID);
+            if (sessionId == null || sessionId.length() == 0) {
+                finish(BridgeContract.RESULT_BAD_REQUEST, "empty session id");
+                return;
+            }
+            if (isSensitiveField(activeEditorInfo)) {
+                finish(BridgeContract.RESULT_SENSITIVE_FIELD, "sensitive field");
+                return;
+            }
+
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+
+            InputConnection inputConnection = getInputConnection(service);
+            if (inputConnection == null) {
+                finish(BridgeContract.RESULT_NO_INPUT_CONNECTION, "no input connection");
+                return;
+            }
+
+            clearComposingPreviewIfOwned(inputConnection);
+            activeSessionId = sessionId;
+            finish(BridgeContract.RESULT_OK, "session started");
+        }
+
+        private void handleCancelSession(Intent intent) {
+            String sessionId = intent.getStringExtra(BridgeContract.EXTRA_SESSION_ID);
+            if (!isSessionAccepted(sessionId)) {
+                finish(BridgeContract.RESULT_SESSION_MISMATCH, "session mismatch");
+                return;
+            }
+
+            InputMethodService service = activeServiceRef.get();
+            InputConnection inputConnection = getInputConnection(service);
+            boolean ok = inputConnection == null || clearComposingPreviewIfOwned(inputConnection);
+            activeSessionId = null;
+            if (ok) {
+                finish(BridgeContract.RESULT_OK, "session cancelled");
+            } else {
+                finish(BridgeContract.RESULT_COMPOSING_FAILED, "cancel composing failed");
+            }
+        }
+
         private void handleInsertText(Intent intent) {
+            String sessionId = intent.getStringExtra(BridgeContract.EXTRA_SESSION_ID);
+            if (!isSessionAccepted(sessionId)) {
+                finish(BridgeContract.RESULT_SESSION_MISMATCH, "session mismatch");
+                return;
+            }
+
             CharSequence value = intent.getCharSequenceExtra(BridgeContract.EXTRA_TEXT);
             if (value == null || value.length() == 0) {
                 finish(BridgeContract.RESULT_BAD_REQUEST, "empty text");
@@ -303,10 +363,19 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + ": insert text failed: " + t);
                 ok = false;
             }
+            if (ok && sessionId != null && sessionId.length() > 0) {
+                activeSessionId = null;
+            }
             finish(ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMMIT_FAILED, ok ? "ok" : "commit failed");
         }
 
         private void handleSetComposingText(Intent intent) {
+            String sessionId = intent.getStringExtra(BridgeContract.EXTRA_SESSION_ID);
+            if (!isSessionAccepted(sessionId)) {
+                finish(BridgeContract.RESULT_SESSION_MISMATCH, "session mismatch");
+                return;
+            }
+
             CharSequence value = intent.getCharSequenceExtra(BridgeContract.EXTRA_TEXT);
             if (value == null) value = "";
             if (isSensitiveField(activeEditorInfo)) {
@@ -347,7 +416,13 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             );
         }
 
-        private void handleFinishComposingText() {
+        private void handleFinishComposingText(Intent intent) {
+            String sessionId = intent.getStringExtra(BridgeContract.EXTRA_SESSION_ID);
+            if (!isSessionAccepted(sessionId)) {
+                finish(BridgeContract.RESULT_SESSION_MISMATCH, "session mismatch");
+                return;
+            }
+
             InputMethodService service = activeServiceRef.get();
             if (service == null) {
                 finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
@@ -368,10 +443,41 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + ": finishComposingText failed: " + t);
                 ok = false;
             }
+            if (ok && sessionId != null && sessionId.length() > 0) {
+                activeSessionId = null;
+            }
             finish(
                 ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMPOSING_FAILED,
                 ok ? "ok" : "finish composing failed"
             );
+        }
+
+        private boolean isSessionAccepted(String sessionId) {
+            if (activeSessionId == null || activeSessionId.length() == 0) return true;
+            if (sessionId == null || sessionId.length() == 0) return true;
+            return activeSessionId.equals(sessionId);
+        }
+
+        private boolean clearComposingPreviewIfOwned(InputConnection inputConnection) {
+            if (inputConnection == null) return false;
+            if (!composingPreviewActive) {
+                resetComposingPreviewState();
+                return true;
+            }
+            if (!isComposingPreviewForActiveEditor()) {
+                resetComposingPreviewState();
+                return true;
+            }
+            try {
+                boolean ok = inputConnection.setComposingText("", 1) &&
+                    inputConnection.finishComposingText();
+                resetComposingPreviewState();
+                return ok;
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": clear composing preview failed: " + t);
+                resetComposingPreviewState();
+                return false;
+            }
         }
 
         private InputConnection getInputConnection(InputMethodService service) {
@@ -406,6 +512,11 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             composingEditorInputType = 0;
         }
 
+        void resetBridgeSessionState() {
+            activeSessionId = null;
+            resetComposingPreviewState();
+        }
+
         private boolean isSensitiveField(EditorInfo editorInfo) {
             if (editorInfo == null) return false;
             int variation = editorInfo.inputType & InputType.TYPE_MASK_VARIATION;
@@ -421,9 +532,43 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             return false;
         }
 
+        private void fillStatusExtras(Bundle extras, InputMethodService service, InputConnection inputConnection) {
+            extras.putString(BridgeContract.EXTRA_TARGET_PACKAGE, packageName);
+            extras.putString(BridgeContract.EXTRA_MODULE_VERSION, BridgeContract.MODULE_VERSION);
+            extras.putBoolean(BridgeContract.EXTRA_HAS_INPUT_CONNECTION, inputConnection != null);
+            extras.putBoolean(BridgeContract.EXTRA_IS_SENSITIVE_FIELD, isSensitiveField(activeEditorInfo));
+            extras.putBoolean(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, isImeWindowVisible(service));
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_INSERT_TEXT, true);
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_COMPOSING_PREVIEW, true);
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_FINISH_COMPOSING_TEXT, true);
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_SESSIONS, true);
+            if (activeSessionId != null) {
+                extras.putString(BridgeContract.EXTRA_ACTIVE_SESSION_ID, activeSessionId);
+            }
+            if (lastOperation != null) {
+                extras.putString(BridgeContract.EXTRA_LAST_OPERATION, lastOperation);
+                extras.putInt(BridgeContract.EXTRA_LAST_RESULT_CODE, lastResultCode);
+            }
+            if (lastError != null && lastError.length() > 0) {
+                extras.putString(BridgeContract.EXTRA_LAST_ERROR, lastError);
+            }
+        }
+
         private void finish(int code, String message) {
             Bundle extras = getResultExtras(true);
+            InputMethodService service = activeServiceRef.get();
+            fillStatusExtras(extras, service, getInputConnection(service));
             extras.putString(BridgeContract.EXTRA_MESSAGE, message);
+            lastOperation = currentOperation;
+            lastResultCode = code;
+            lastError = code == BridgeContract.RESULT_OK ? "" : message;
+            if (lastOperation != null) {
+                extras.putString(BridgeContract.EXTRA_LAST_OPERATION, lastOperation);
+                extras.putInt(BridgeContract.EXTRA_LAST_RESULT_CODE, lastResultCode);
+            }
+            if (lastError.length() > 0) {
+                extras.putString(BridgeContract.EXTRA_LAST_ERROR, lastError);
+            }
             setResultCode(code);
             setResultData(message);
             setResultExtras(extras);
