@@ -67,6 +67,54 @@ jobs:
             exit 1
           fi
 
+      - name: Detect release publishing
+        id: release_mode
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          should_publish="false"
+          reason="none"
+          release_tag="${{ steps.version.outputs.release_tag }}"
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            should_publish="true"
+            reason="tag"
+            release_tag="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" &&
+              ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ) ]]; then
+            before="${{ github.event.before }}"
+            current_version="${{ steps.version.outputs.release_tag }}"
+            previous_version=""
+
+            if [ -n "$before" ] &&
+               [ "$before" != "0000000000000000000000000000000000000000" ] &&
+               git cat-file -e "$before:app/build.gradle.kts" 2>/dev/null; then
+              previous_name="$(git show "$before:app/build.gradle.kts" | grep -oP 'versionName\s*=\s*"\K[^"]+' || true)"
+              previous_code="$(git show "$before:app/build.gradle.kts" | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)"
+              if [ -n "$previous_name" ] && [ -n "$previous_code" ]; then
+                previous_version="${previous_code}-${previous_name}"
+              fi
+            fi
+
+            if [ "$previous_version" != "$current_version" ]; then
+              should_publish="true"
+              reason="version_bump"
+            else
+              echo "Version unchanged: $current_version"
+              if ! gh release view "$current_version" >/dev/null 2>&1; then
+                should_publish="true"
+                reason="missing_release"
+                echo "GitHub Release is missing for current version: $current_version"
+              fi
+            fi
+          fi
+
+          echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "Release publishing: $should_publish ($reason, tag=$release_tag)"
+
       - name: Decode release keystore
         shell: bash
         env:
@@ -77,8 +125,8 @@ jobs:
             printf '%s' "$BIBI_BRIDGE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore/release.jks"
           fi
 
-      - name: Require signing for tagged release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Require signing for release publishing
+        if: steps.release_mode.outputs.should_publish == 'true'
         shell: bash
         env:
           BIBI_BRIDGE_KEYSTORE_PASSWORD: ${{ secrets.BIBI_BRIDGE_KEYSTORE_PASSWORD }}
@@ -89,7 +137,7 @@ jobs:
              [ -z "${BIBI_BRIDGE_KEYSTORE_PASSWORD:-}" ] ||
              [ -z "${BIBI_BRIDGE_KEY_ALIAS:-}" ] ||
              [ -z "${BIBI_BRIDGE_KEY_PASSWORD:-}" ]; then
-            echo "::error::Tagged releases require BIBI_BRIDGE_KEYSTORE_BASE64, BIBI_BRIDGE_KEYSTORE_PASSWORD, BIBI_BRIDGE_KEY_ALIAS, and BIBI_BRIDGE_KEY_PASSWORD secrets."
+            echo "::error::Release publishing requires BIBI_BRIDGE_KEYSTORE_BASE64, BIBI_BRIDGE_KEYSTORE_PASSWORD, BIBI_BRIDGE_KEY_ALIAS, and BIBI_BRIDGE_KEY_PASSWORD secrets."
             exit 1
           fi
 
@@ -131,27 +179,10 @@ jobs:
           if-no-files-found: error
 
       - name: Create version tag
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: steps.release_mode.outputs.reason == 'version_bump' || steps.release_mode.outputs.reason == 'missing_release'
         shell: bash
         run: |
-          before="${{ github.event.before }}"
-          current_version="${{ steps.version.outputs.version_code }}-${{ steps.version.outputs.version_name }}"
-          previous_version=""
-
-          if [ -n "$before" ] &&
-             [ "$before" != "0000000000000000000000000000000000000000" ] &&
-             git cat-file -e "$before:app/build.gradle.kts" 2>/dev/null; then
-            previous_name="$(git show "$before:app/build.gradle.kts" | grep -oP 'versionName\s*=\s*"\K[^"]+' || true)"
-            previous_code="$(git show "$before:app/build.gradle.kts" | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)"
-            if [ -n "$previous_name" ] && [ -n "$previous_code" ]; then
-              previous_version="${previous_code}-${previous_name}"
-            fi
-          fi
-
-          if [ "$previous_version" = "$current_version" ]; then
-            echo "Version unchanged: $current_version"
-            exit 0
-          fi
+          current_version="${{ steps.release_mode.outputs.release_tag }}"
 
           if git rev-parse -q --verify "refs/tags/$current_version" >/dev/null ||
              git ls-remote --exit-code --tags origin "refs/tags/$current_version" >/dev/null 2>&1; then
@@ -165,12 +196,12 @@ jobs:
           git push origin "$current_version"
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.release_mode.outputs.should_publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ steps.release_mode.outputs.release_tag }}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$tag" --notes "BiBi IME Bridge $tag"
           fi
