@@ -15,13 +15,13 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.brycewg.asrkb.imebridge"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.brycewg.asrkb.imebridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
+        versionCode = 9
         versionName = "0.1.4"
     }
 
