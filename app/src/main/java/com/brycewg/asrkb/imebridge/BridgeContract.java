@@ -7,9 +7,12 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.1.3";
+    static final String MODULE_VERSION = "0.1.4";
 
-    static final String MAIN_APP_PACKAGE = "com.brycewg.asrkb";
+    static final String[] MAIN_APP_PACKAGES = {
+        "com.brycewg.asrkb",
+        "com.brycewg.asrkb.pro"
+    };
     static final String PERMISSION = "com.brycewg.asrkb.permission.IME_BRIDGE";
     static final String ACTION_QUERY_STATUS = "com.brycewg.asrkb.imebridge.action.QUERY_STATUS";
     static final String ACTION_INSERT_TEXT = "com.brycewg.asrkb.imebridge.action.INSERT_TEXT";

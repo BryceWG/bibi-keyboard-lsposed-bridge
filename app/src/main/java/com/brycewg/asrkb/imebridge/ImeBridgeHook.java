@@ -184,18 +184,20 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         if (receiver != null) receiver.resetBridgeSessionState();
     }
 
-    private static void sendImeWindowVisibility(Context context, String packageName, boolean visible) {
+    private static void sendImeWindowVisibility(Context context, String imePackageName, boolean visible) {
         if (context == null) return;
-        try {
-            Intent intent = new Intent(BridgeContract.ACTION_IME_WINDOW_VISIBILITY_CHANGED);
-            intent.setPackage(BridgeContract.MAIN_APP_PACKAGE);
-            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-            intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
-            intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, packageName);
-            intent.putExtra(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, visible);
-            context.sendBroadcast(intent, BridgeContract.PERMISSION);
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to send IME visibility: " + t);
+        for (String appPackageName : BridgeContract.MAIN_APP_PACKAGES) {
+            try {
+                Intent intent = new Intent(BridgeContract.ACTION_IME_WINDOW_VISIBILITY_CHANGED);
+                intent.setPackage(appPackageName);
+                intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
+                intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, imePackageName);
+                intent.putExtra(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, visible);
+                context.sendBroadcast(intent, BridgeContract.PERMISSION);
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to send IME visibility to " + appPackageName + ": " + t);
+            }
         }
     }
 
