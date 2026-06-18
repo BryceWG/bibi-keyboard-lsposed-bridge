@@ -45,7 +45,13 @@ jobs:
       - name: Prepare Android SDK
         shell: bash
         run: |
+          set +e
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          sdkmanager_status="${PIPESTATUS[1]}"
+          set -e
+          if [ "$sdkmanager_status" -ne 0 ]; then
+            exit "$sdkmanager_status"
+          fi
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
 
       - name: Validate tagged release name
