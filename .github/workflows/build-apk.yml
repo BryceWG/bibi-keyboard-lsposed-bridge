@@ -1,0 +1,188 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build bridge APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version_name="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)"
+          version_code="$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)"
+          release_tag="${version_code}-${version_name}"
+
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
+
+      - name: Validate tagged release name
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          expected="${{ steps.version.outputs.release_tag }}"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::Tagged releases must use versionCode-versionName, expected '$expected' for this build."
+            exit 1
+          fi
+
+      - name: Decode release keystore
+        shell: bash
+        env:
+          BIBI_BRIDGE_KEYSTORE_BASE64: ${{ secrets.BIBI_BRIDGE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "${BIBI_BRIDGE_KEYSTORE_BASE64:-}" ]; then
+            mkdir -p "$RUNNER_TEMP/keystore"
+            printf '%s' "$BIBI_BRIDGE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore/release.jks"
+          fi
+
+      - name: Require signing for tagged release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          BIBI_BRIDGE_KEYSTORE_PASSWORD: ${{ secrets.BIBI_BRIDGE_KEYSTORE_PASSWORD }}
+          BIBI_BRIDGE_KEY_ALIAS: ${{ secrets.BIBI_BRIDGE_KEY_ALIAS }}
+          BIBI_BRIDGE_KEY_PASSWORD: ${{ secrets.BIBI_BRIDGE_KEY_PASSWORD }}
+        run: |
+          if [ ! -s "$RUNNER_TEMP/keystore/release.jks" ] ||
+             [ -z "${BIBI_BRIDGE_KEYSTORE_PASSWORD:-}" ] ||
+             [ -z "${BIBI_BRIDGE_KEY_ALIAS:-}" ] ||
+             [ -z "${BIBI_BRIDGE_KEY_PASSWORD:-}" ]; then
+            echo "::error::Tagged releases require BIBI_BRIDGE_KEYSTORE_BASE64, BIBI_BRIDGE_KEYSTORE_PASSWORD, BIBI_BRIDGE_KEY_ALIAS, and BIBI_BRIDGE_KEY_PASSWORD secrets."
+            exit 1
+          fi
+
+      - name: Build APKs
+        shell: bash
+        env:
+          BIBI_BRIDGE_KEYSTORE_PATH: ${{ runner.temp }}/keystore/release.jks
+          BIBI_BRIDGE_KEYSTORE_PASSWORD: ${{ secrets.BIBI_BRIDGE_KEYSTORE_PASSWORD }}
+          BIBI_BRIDGE_KEY_ALIAS: ${{ secrets.BIBI_BRIDGE_KEY_ALIAS }}
+          BIBI_BRIDGE_KEY_PASSWORD: ${{ secrets.BIBI_BRIDGE_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+
+      - name: Collect APKs
+        id: collect
+        shell: bash
+        run: |
+          version_name="${{ steps.version.outputs.version_name }}"
+          version_code="${{ steps.version.outputs.version_code }}"
+          mkdir -p dist
+
+          debug_apk="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          release_apk="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+
+          cp "$debug_apk" "dist/bibi-ime-bridge-${version_name}-${version_code}-debug.apk"
+          cp "$release_apk" "dist/bibi-ime-bridge-${version_name}-${version_code}-release.apk"
+
+          jar tf "dist/bibi-ime-bridge-${version_name}-${version_code}-release.apk" | grep -q '^assets/xposed_init$'
+          jar tf "dist/bibi-ime-bridge-${version_name}-${version_code}-release.apk" | grep -q '^META-INF/xposed/module.prop$'
+
+          ls -lh dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bibi-ime-bridge-${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.version_code }}
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Create version tag
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        shell: bash
+        run: |
+          before="${{ github.event.before }}"
+          current_version="${{ steps.version.outputs.version_code }}-${{ steps.version.outputs.version_name }}"
+          previous_version=""
+
+          if [ -n "$before" ] &&
+             [ "$before" != "0000000000000000000000000000000000000000" ] &&
+             git cat-file -e "$before:app/build.gradle.kts" 2>/dev/null; then
+            previous_name="$(git show "$before:app/build.gradle.kts" | grep -oP 'versionName\s*=\s*"\K[^"]+' || true)"
+            previous_code="$(git show "$before:app/build.gradle.kts" | grep -oP 'versionCode\s*=\s*\K[0-9]+' || true)"
+            if [ -n "$previous_name" ] && [ -n "$previous_code" ]; then
+              previous_version="${previous_code}-${previous_name}"
+            fi
+          fi
+
+          if [ "$previous_version" = "$current_version" ]; then
+            echo "Version unchanged: $current_version"
+            exit 0
+          fi
+
+          if git rev-parse -q --verify "refs/tags/$current_version" >/dev/null ||
+             git ls-remote --exit-code --tags origin "refs/tags/$current_version" >/dev/null 2>&1; then
+            echo "Tag already exists: $current_version"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$current_version" -m "BiBi IME Bridge $current_version"
+          git push origin "$current_version"
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes "BiBi IME Bridge $tag"
+          fi
+          gh release upload "$tag" dist/*-release.apk --clobber
+
+      - name: Write summary
+        shell: bash
+        run: |
+          {
+            echo "## BiBi IME Bridge"
+            echo
+            echo "- versionName: ${{ steps.version.outputs.version_name }}"
+            echo "- versionCode: ${{ steps.version.outputs.version_code }}"
+            echo "- release tag: ${{ steps.version.outputs.release_tag }}"
+            if [ -s "$RUNNER_TEMP/keystore/release.jks" ]; then
+              echo "- release signing: enabled"
+            else
+              echo "- release signing: disabled for this non-tag build"
+            fi
+            echo
+            echo "\`\`\`"
+            ls -lh dist
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

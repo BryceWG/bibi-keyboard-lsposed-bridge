@@ -27,7 +27,9 @@ the active composing preview and finishing composition.
 
 It also reports whether the hooked input method panel is currently visible, so
 the main app can show or hide the floating ball without relying on Accessibility
-for keyboard visibility detection.
+for keyboard visibility detection. Visibility hints are sent to both the open
+source app package (`com.brycewg.asrkb`) and the Pro app package
+(`com.brycewg.asrkb.pro`).
 
 Streaming preview is treated as composing text: it should remain reversible until
 the final result is committed or the session is cancelled. Newer bridge builds
