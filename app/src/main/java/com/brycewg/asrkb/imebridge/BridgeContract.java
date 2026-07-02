@@ -7,13 +7,20 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.1.4";
+    static final String MODULE_VERSION = "0.1.5";
 
+    static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
+    static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
     static final String[] MAIN_APP_PACKAGES = {
-        "com.brycewg.asrkb",
-        "com.brycewg.asrkb.pro"
+        PACKAGE_OPEN_SOURCE,
+        PACKAGE_PRO
     };
-    static final String PERMISSION = "com.brycewg.asrkb.permission.IME_BRIDGE";
+    static final String PERMISSION_OPEN_SOURCE = "com.brycewg.asrkb.permission.IME_BRIDGE";
+    static final String PERMISSION_PRO = "com.brycewg.asrkb.pro.permission.IME_BRIDGE";
+    static final String[] PERMISSIONS = {
+        PERMISSION_OPEN_SOURCE,
+        PERMISSION_PRO
+    };
     static final String ACTION_QUERY_STATUS = "com.brycewg.asrkb.imebridge.action.QUERY_STATUS";
     static final String ACTION_INSERT_TEXT = "com.brycewg.asrkb.imebridge.action.INSERT_TEXT";
     static final String ACTION_BEGIN_SESSION = "com.brycewg.asrkb.imebridge.action.BEGIN_SESSION";
@@ -55,6 +62,17 @@ final class BridgeContract {
     static final int RESULT_BAD_REQUEST = -7;
     static final int RESULT_COMPOSING_FAILED = -8;
     static final int RESULT_SESSION_MISMATCH = -9;
+
+    static String permissionForAppPackage(String appPackageName) {
+        if (PACKAGE_PRO.equals(appPackageName)) return PERMISSION_PRO;
+        return PERMISSION_OPEN_SOURCE;
+    }
+
+    static String ownerPackageForPermission(String permission) {
+        if (PERMISSION_OPEN_SOURCE.equals(permission)) return PACKAGE_OPEN_SOURCE;
+        if (PERMISSION_PRO.equals(permission)) return PACKAGE_PRO;
+        return null;
+    }
 
     private BridgeContract() {
     }

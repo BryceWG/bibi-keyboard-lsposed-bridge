@@ -17,6 +17,8 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -28,7 +30,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final String TAG = "BiBiImeBridge";
-    private static final Map<InputMethodService, BridgeReceiver> RECEIVERS = new WeakHashMap<>();
+    private static final Map<InputMethodService, List<BridgeReceiver>> RECEIVERS = new WeakHashMap<>();
 
     private static WeakReference<InputMethodService> activeServiceRef = new WeakReference<>(null);
     private static EditorInfo activeEditorInfo;
@@ -37,7 +39,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         if (lpparam == null || lpparam.packageName == null) return;
-        if ("com.brycewg.asrkb".equals(lpparam.packageName) ||
+        if (BridgeContract.PACKAGE_OPEN_SOURCE.equals(lpparam.packageName) ||
+            BridgeContract.PACKAGE_PRO.equals(lpparam.packageName) ||
             "com.brycewg.asrkb.imebridge".equals(lpparam.packageName)) {
             return;
         }
@@ -141,8 +144,56 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     }
 
     private static synchronized void registerBridgeReceiver(InputMethodService service, String packageName) {
-        if (RECEIVERS.containsKey(service)) return;
-        BridgeReceiver receiver = new BridgeReceiver(packageName);
+        List<BridgeReceiver> receivers = RECEIVERS.get(service);
+        if (receivers == null) {
+            receivers = new ArrayList<>();
+            RECEIVERS.put(service, receivers);
+        }
+        for (String permission : BridgeContract.PERMISSIONS) {
+            if (hasReceiverForPermission(receivers, permission)) continue;
+            if (!isTrustedBridgePermission(service, permission)) continue;
+            BridgeReceiver receiver = new BridgeReceiver(packageName, permission);
+            try {
+                registerBridgeReceiverWithPermission(service, receiver, createBridgeIntentFilter(), permission);
+                receivers.add(receiver);
+                XposedBridge.log(TAG + ": receiver registered for " + packageName +
+                    " with " + permission);
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to register receiver for " + packageName +
+                    " with " + permission + ": " + t);
+            }
+        }
+        if (receivers.isEmpty()) RECEIVERS.remove(service);
+    }
+
+    private static boolean hasReceiverForPermission(List<BridgeReceiver> receivers, String permission) {
+        for (BridgeReceiver receiver : receivers) {
+            if (receiver.isRegisteredForPermission(permission)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isTrustedBridgePermission(Context context, String permission) {
+        String expectedOwner = BridgeContract.ownerPackageForPermission(permission);
+        if (expectedOwner == null) return false;
+        try {
+            String actualOwner = context.getPackageManager()
+                .getPermissionInfo(permission, 0)
+                .packageName;
+            boolean trusted = expectedOwner.equals(actualOwner);
+            if (!trusted) {
+                XposedBridge.log(TAG + ": skip bridge receiver for " + permission +
+                    ", owner is " + actualOwner + ", expected " + expectedOwner);
+            }
+            return trusted;
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": skip bridge receiver for " + permission +
+                ", permission owner unavailable: " + t);
+            return false;
+        }
+    }
+
+    private static IntentFilter createBridgeIntentFilter() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BridgeContract.ACTION_QUERY_STATUS);
         filter.addAction(BridgeContract.ACTION_INSERT_TEXT);
@@ -150,38 +201,46 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         filter.addAction(BridgeContract.ACTION_CANCEL_SESSION);
         filter.addAction(BridgeContract.ACTION_SET_COMPOSING_TEXT);
         filter.addAction(BridgeContract.ACTION_FINISH_COMPOSING_TEXT);
-        try {
-            if (Build.VERSION.SDK_INT >= 33) {
-                service.registerReceiver(
-                    receiver,
-                    filter,
-                    BridgeContract.PERMISSION,
-                    null,
-                    Context.RECEIVER_EXPORTED
-                );
-            } else {
-                service.registerReceiver(receiver, filter, BridgeContract.PERMISSION, null);
-            }
-            RECEIVERS.put(service, receiver);
-            XposedBridge.log(TAG + ": receiver registered for " + packageName);
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to register receiver for " + packageName + ": " + t);
+        return filter;
+    }
+
+    private static void registerBridgeReceiverWithPermission(
+        InputMethodService service,
+        BridgeReceiver receiver,
+        IntentFilter filter,
+        String permission
+    ) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            service.registerReceiver(
+                receiver,
+                filter,
+                permission,
+                null,
+                Context.RECEIVER_EXPORTED
+            );
+        } else {
+            service.registerReceiver(receiver, filter, permission, null);
         }
     }
 
     private static synchronized void unregisterBridgeReceiver(InputMethodService service) {
-        BridgeReceiver receiver = RECEIVERS.remove(service);
-        if (receiver == null) return;
-        try {
-            service.unregisterReceiver(receiver);
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": failed to unregister receiver: " + t);
+        List<BridgeReceiver> receivers = RECEIVERS.remove(service);
+        if (receivers == null) return;
+        for (BridgeReceiver receiver : receivers) {
+            try {
+                service.unregisterReceiver(receiver);
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to unregister receiver: " + t);
+            }
         }
     }
 
     private static synchronized void resetBridgeReceiverPreview(InputMethodService service) {
-        BridgeReceiver receiver = RECEIVERS.get(service);
-        if (receiver != null) receiver.resetBridgeSessionState();
+        List<BridgeReceiver> receivers = RECEIVERS.get(service);
+        if (receivers == null) return;
+        for (BridgeReceiver receiver : receivers) {
+            receiver.resetBridgeSessionState();
+        }
     }
 
     private static void sendImeWindowVisibility(Context context, String imePackageName, boolean visible) {
@@ -194,7 +253,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
                 intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, imePackageName);
                 intent.putExtra(BridgeContract.EXTRA_IME_WINDOW_VISIBLE, visible);
-                context.sendBroadcast(intent, BridgeContract.PERMISSION);
+                context.sendBroadcast(intent, BridgeContract.permissionForAppPackage(appPackageName));
             } catch (Throwable t) {
                 XposedBridge.log(TAG + ": failed to send IME visibility to " + appPackageName + ": " + t);
             }
@@ -217,6 +276,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
     private static final class BridgeReceiver extends BroadcastReceiver {
         private final String packageName;
+        private final String permission;
         private boolean composingPreviewActive;
         private String activeSessionId;
         private String currentOperation;
@@ -227,8 +287,13 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         private int composingEditorFieldId;
         private int composingEditorInputType;
 
-        BridgeReceiver(String packageName) {
+        BridgeReceiver(String packageName, String permission) {
             this.packageName = packageName;
+            this.permission = permission;
+        }
+
+        boolean isRegisteredForPermission(String permission) {
+            return this.permission.equals(permission);
         }
 
         @Override
