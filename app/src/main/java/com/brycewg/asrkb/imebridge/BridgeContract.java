@@ -7,7 +7,7 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.1.5";
+    static final String MODULE_VERSION = "0.1.6";
 
     static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
     static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
@@ -29,6 +29,8 @@ final class BridgeContract {
         "com.brycewg.asrkb.imebridge.action.SET_COMPOSING_TEXT";
     static final String ACTION_FINISH_COMPOSING_TEXT =
         "com.brycewg.asrkb.imebridge.action.FINISH_COMPOSING_TEXT";
+    static final String ACTION_QUERY_INPUT_CONTEXT =
+        "com.brycewg.asrkb.imebridge.action.QUERY_INPUT_CONTEXT";
     static final String ACTION_IME_WINDOW_VISIBILITY_CHANGED =
         "com.brycewg.asrkb.imebridge.action.IME_WINDOW_VISIBILITY_CHANGED";
 
@@ -37,6 +39,9 @@ final class BridgeContract {
     static final String EXTRA_SESSION_ID = "session_id";
     static final String EXTRA_TEXT = "text";
     static final String EXTRA_CURSOR_POSITION = "cursor_position";
+    static final String EXTRA_MAX_CONTEXT_CHARS = "max_context_chars";
+    static final String EXTRA_BEFORE_CURSOR = "before_cursor";
+    static final String EXTRA_AFTER_CURSOR = "after_cursor";
     static final String EXTRA_TARGET_PACKAGE = "target_package";
     static final String EXTRA_HAS_INPUT_CONNECTION = "has_input_connection";
     static final String EXTRA_IS_SENSITIVE_FIELD = "is_sensitive_field";
@@ -46,6 +51,7 @@ final class BridgeContract {
     static final String EXTRA_SUPPORTS_COMPOSING_PREVIEW = "supports_composing_preview";
     static final String EXTRA_SUPPORTS_FINISH_COMPOSING_TEXT = "supports_finish_composing_text";
     static final String EXTRA_SUPPORTS_SESSIONS = "supports_sessions";
+    static final String EXTRA_SUPPORTS_INPUT_CONTEXT = "supports_input_context";
     static final String EXTRA_ACTIVE_SESSION_ID = "active_session_id";
     static final String EXTRA_LAST_OPERATION = "last_operation";
     static final String EXTRA_LAST_RESULT_CODE = "last_result_code";

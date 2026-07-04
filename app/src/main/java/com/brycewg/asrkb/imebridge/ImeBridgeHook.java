@@ -201,6 +201,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         filter.addAction(BridgeContract.ACTION_CANCEL_SESSION);
         filter.addAction(BridgeContract.ACTION_SET_COMPOSING_TEXT);
         filter.addAction(BridgeContract.ACTION_FINISH_COMPOSING_TEXT);
+        filter.addAction(BridgeContract.ACTION_QUERY_INPUT_CONTEXT);
         return filter;
     }
 
@@ -322,6 +323,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 handleSetComposingText(intent);
             } else if (BridgeContract.ACTION_FINISH_COMPOSING_TEXT.equals(action)) {
                 handleFinishComposingText(intent);
+            } else if (BridgeContract.ACTION_QUERY_INPUT_CONTEXT.equals(action)) {
+                handleQueryInputContext(intent);
             } else {
                 finish(BridgeContract.RESULT_BAD_REQUEST, "unknown action");
             }
@@ -519,6 +522,66 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             );
         }
 
+        private void handleQueryInputContext(Intent intent) {
+            if (activeEditorInfo == null) {
+                finish(BridgeContract.RESULT_NO_INPUT_CONNECTION, "no active editor");
+                return;
+            }
+            if (isSensitiveField(activeEditorInfo)) {
+                finish(BridgeContract.RESULT_SENSITIVE_FIELD, "sensitive field");
+                return;
+            }
+
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+
+            InputConnection inputConnection = getInputConnection(service);
+            if (inputConnection == null) {
+                finish(BridgeContract.RESULT_NO_INPUT_CONNECTION, "no input connection");
+                return;
+            }
+
+            int maxChars = intent.getIntExtra(BridgeContract.EXTRA_MAX_CONTEXT_CHARS, 1500);
+            if (maxChars < 0) maxChars = 0;
+            if (maxChars > 10000) maxChars = 10000;
+
+            String before = "";
+            String after = "";
+            try {
+                CharSequence beforeSeq = inputConnection.getTextBeforeCursor(maxChars, 0);
+                CharSequence afterSeq = inputConnection.getTextAfterCursor(maxChars, 0);
+                before = trimBeforeCursor(beforeSeq, maxChars);
+                after = trimAfterCursor(afterSeq, maxChars);
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": query input context failed: " + t);
+                finish(BridgeContract.RESULT_COMMIT_FAILED, "query input context failed");
+                return;
+            }
+
+            Bundle extras = getResultExtras(true);
+            extras.putString(BridgeContract.EXTRA_BEFORE_CURSOR, before);
+            extras.putString(BridgeContract.EXTRA_AFTER_CURSOR, after);
+            setResultExtras(extras);
+            finish(BridgeContract.RESULT_OK, "ok");
+        }
+
+        private String trimBeforeCursor(CharSequence value, int maxChars) {
+            if (value == null || value.length() == 0 || maxChars <= 0) return "";
+            String text = value.toString();
+            if (text.length() <= maxChars) return text;
+            return text.substring(text.length() - maxChars);
+        }
+
+        private String trimAfterCursor(CharSequence value, int maxChars) {
+            if (value == null || value.length() == 0 || maxChars <= 0) return "";
+            String text = value.toString();
+            if (text.length() <= maxChars) return text;
+            return text.substring(0, maxChars);
+        }
+
         private boolean isSessionAccepted(String sessionId) {
             if (activeSessionId == null || activeSessionId.length() == 0) return true;
             if (sessionId == null || sessionId.length() == 0) return true;
@@ -609,6 +672,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_COMPOSING_PREVIEW, true);
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_FINISH_COMPOSING_TEXT, true);
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_SESSIONS, true);
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_INPUT_CONTEXT, true);
             if (activeSessionId != null) {
                 extras.putString(BridgeContract.EXTRA_ACTIVE_SESSION_ID, activeSessionId);
             }

@@ -38,13 +38,17 @@ results from an old recording session are rejected by the hooked IME side.
 
 The module returns capability metadata such as module version, active input
 connection state, sensitive-field blocking state, IME window visibility,
-composing preview support, and session support. BiBi records decisive bridge
-calls in its existing API log with text length and result codes, not the
-recognized text content.
+composing preview support, session support, and input-context support. When the
+Pro app's input-context post-processing option is enabled, BiBi can request text
+around the cursor so AI post-processing can use it as reference material. The
+module refuses this request for sensitive input fields. BiBi records decisive
+bridge calls in its existing API log with text length/context length and result
+codes, not the recognized text content or input-context content.
 
 The APK includes `META-INF/xposed/module.prop` for LSPosed/Xposed module
 metadata. Release update checks still depend on publishing this standalone
 module repository through the chosen release/feed channel.
 
-It does not read user input, inject UI into the third-party keyboard, or handle
-recording / ASR / post-processing.
+It does not inject UI into the third-party keyboard or handle recording / ASR /
+post-processing. It only reads text around the cursor when the hooked main app
+explicitly requests input-field context.
