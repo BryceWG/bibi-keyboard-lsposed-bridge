@@ -7,7 +7,7 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.1.6";
+    static final String MODULE_VERSION = "0.2.0";
 
     static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
     static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
@@ -33,6 +33,10 @@ final class BridgeContract {
         "com.brycewg.asrkb.imebridge.action.QUERY_INPUT_CONTEXT";
     static final String ACTION_IME_WINDOW_VISIBILITY_CHANGED =
         "com.brycewg.asrkb.imebridge.action.IME_WINDOW_VISIBILITY_CHANGED";
+    static final String PCM_ACTION_BIND_SERVICE =
+        "com.brycewg.asrkb.imebridge.action.BIND_PCM_SESSION_SERVICE";
+    static final String PCM_DESCRIPTOR =
+        "com.brycewg.asrkb.imebridge.ImeBridgePcmSessionService";
 
     static final String EXTRA_PROTOCOL_VERSION = "protocol_version";
     static final String EXTRA_REQUEST_ID = "request_id";
@@ -51,6 +55,7 @@ final class BridgeContract {
     static final String EXTRA_SUPPORTS_COMPOSING_PREVIEW = "supports_composing_preview";
     static final String EXTRA_SUPPORTS_FINISH_COMPOSING_TEXT = "supports_finish_composing_text";
     static final String EXTRA_SUPPORTS_SESSIONS = "supports_sessions";
+    static final String EXTRA_SUPPORTS_PCM_RECORDING = "supports_pcm_recording";
     static final String EXTRA_SUPPORTS_INPUT_CONTEXT = "supports_input_context";
     static final String EXTRA_ACTIVE_SESSION_ID = "active_session_id";
     static final String EXTRA_LAST_OPERATION = "last_operation";
@@ -69,6 +74,22 @@ final class BridgeContract {
     static final int RESULT_COMPOSING_FAILED = -8;
     static final int RESULT_SESSION_MISMATCH = -9;
 
+    static final int PCM_TRANSACTION_BEGIN = android.os.IBinder.FIRST_CALL_TRANSACTION + 0;
+    static final int PCM_TRANSACTION_WRITE_FRAME = android.os.IBinder.FIRST_CALL_TRANSACTION + 1;
+    static final int PCM_TRANSACTION_FINISH = android.os.IBinder.FIRST_CALL_TRANSACTION + 2;
+    static final int PCM_TRANSACTION_CANCEL = android.os.IBinder.FIRST_CALL_TRANSACTION + 3;
+
+    static final int PCM_RESULT_OK = 1;
+    static final int PCM_RESULT_FEATURE_DISABLED = -1;
+    static final int PCM_RESULT_PACKAGE_MISMATCH = -2;
+    static final int PCM_RESULT_BRIDGE_UNAVAILABLE = -3;
+    static final int PCM_RESULT_NO_INPUT_CONNECTION = -4;
+    static final int PCM_RESULT_SENSITIVE_FIELD = -5;
+    static final int PCM_RESULT_BAD_REQUEST = -6;
+    static final int PCM_RESULT_BUSY = -7;
+    static final int PCM_RESULT_STALE_SESSION = -8;
+    static final int PCM_RESULT_UNSUPPORTED = -9;
+
     static String permissionForAppPackage(String appPackageName) {
         if (PACKAGE_PRO.equals(appPackageName)) return PERMISSION_PRO;
         return PERMISSION_OPEN_SOURCE;
@@ -78,6 +99,33 @@ final class BridgeContract {
         if (PERMISSION_OPEN_SOURCE.equals(permission)) return PACKAGE_OPEN_SOURCE;
         if (PERMISSION_PRO.equals(permission)) return PACKAGE_PRO;
         return null;
+    }
+
+    static String pcmMessageForCode(int code) {
+        switch (code) {
+            case PCM_RESULT_OK:
+                return "ok";
+            case PCM_RESULT_FEATURE_DISABLED:
+                return "feature disabled";
+            case PCM_RESULT_PACKAGE_MISMATCH:
+                return "package mismatch";
+            case PCM_RESULT_BRIDGE_UNAVAILABLE:
+                return "bridge unavailable";
+            case PCM_RESULT_NO_INPUT_CONNECTION:
+                return "no input connection";
+            case PCM_RESULT_SENSITIVE_FIELD:
+                return "sensitive field";
+            case PCM_RESULT_BAD_REQUEST:
+                return "bad request";
+            case PCM_RESULT_BUSY:
+                return "busy";
+            case PCM_RESULT_STALE_SESSION:
+                return "stale session";
+            case PCM_RESULT_UNSUPPORTED:
+                return "unsupported";
+            default:
+                return "unknown: " + code;
+        }
     }
 
     private BridgeContract() {

@@ -31,6 +31,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final String TAG = "BiBiImeBridge";
     private static final Map<InputMethodService, List<BridgeReceiver>> RECEIVERS = new WeakHashMap<>();
+    private static final Map<InputMethodService, CaptureRuntime> CAPTURE_RUNTIMES = new WeakHashMap<>();
 
     private static WeakReference<InputMethodService> activeServiceRef = new WeakReference<>(null);
     private static EditorInfo activeEditorInfo;
@@ -83,6 +84,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                         : null;
                     imeWindowVisible = safeIsInputViewShown(service);
                     registerBridgeReceiver(service, packageName);
+                    attachCaptureRuntime(service, packageName);
                     if (!restarting) resetBridgeReceiverPreview(service);
                 }
             }
@@ -93,6 +95,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             protected void afterHookedMethod(MethodHookParam param) {
                 InputMethodService service = asImeService(param.thisObject);
                 resetBridgeReceiverPreview(service);
+                cancelCaptureRuntime(service, "finish input");
                 if (service != null && service == activeServiceRef.get()) {
                     activeEditorInfo = null;
                 }
@@ -107,6 +110,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 activeServiceRef = new WeakReference<>(service);
                 imeWindowVisible = true;
                 registerBridgeReceiver(service, packageName);
+                attachCaptureRuntime(service, packageName);
                 sendImeWindowVisibility(service, packageName, true);
             }
         });
@@ -119,6 +123,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 if (service == activeServiceRef.get()) {
                     imeWindowVisible = false;
                 }
+                detachCaptureRuntime(service, "window hidden");
                 sendImeWindowVisibility(service, packageName, false);
             }
         });
@@ -129,6 +134,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 InputMethodService service = asImeService(param.thisObject);
                 if (service == null) return;
                 resetBridgeReceiverPreview(service);
+                destroyCaptureRuntime(service);
                 unregisterBridgeReceiver(service);
                 if (service == activeServiceRef.get()) {
                     activeServiceRef = new WeakReference<>(null);
@@ -191,6 +197,35 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 ", permission owner unavailable: " + t);
             return false;
         }
+    }
+
+    private static synchronized void attachCaptureRuntime(InputMethodService service, String packageName) {
+        if (service == null) return;
+        CaptureRuntime runtime = CAPTURE_RUNTIMES.get(service);
+        if (runtime == null) {
+            runtime = new CaptureRuntime(service, packageName);
+            CAPTURE_RUNTIMES.put(service, runtime);
+        }
+        runtime.attachLater();
+    }
+
+    private static synchronized void cancelCaptureRuntime(InputMethodService service, String reason) {
+        CaptureRuntime runtime = service == null ? null : CAPTURE_RUNTIMES.get(service);
+        if (runtime != null) runtime.cancel(reason);
+    }
+
+    private static synchronized void detachCaptureRuntime(InputMethodService service, String reason) {
+        CaptureRuntime runtime = service == null ? null : CAPTURE_RUNTIMES.get(service);
+        if (runtime != null) runtime.detach(reason);
+    }
+
+    private static synchronized void destroyCaptureRuntime(InputMethodService service) {
+        CaptureRuntime runtime = service == null ? null : CAPTURE_RUNTIMES.remove(service);
+        if (runtime != null) runtime.destroy();
+    }
+
+    private static synchronized CaptureRuntime getCaptureRuntime(InputMethodService service) {
+        return service == null ? null : CAPTURE_RUNTIMES.get(service);
     }
 
     private static IntentFilter createBridgeIntentFilter() {
@@ -272,6 +307,145 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": isInputViewShown failed: " + t);
             return false;
+        }
+    }
+
+    private static boolean isSensitiveEditor(EditorInfo editorInfo) {
+        if (editorInfo == null) return false;
+        int variation = editorInfo.inputType & InputType.TYPE_MASK_VARIATION;
+        int inputClass = editorInfo.inputType & InputType.TYPE_MASK_CLASS;
+        if (inputClass == InputType.TYPE_CLASS_TEXT) {
+            return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
+        }
+        if (inputClass == InputType.TYPE_CLASS_NUMBER) {
+            return variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD;
+        }
+        return false;
+    }
+
+    private static final class CaptureRuntime implements
+        ImeWindowCaptureHost.Listener,
+        BridgeCaptureCoordinator.CaptureEnvironment,
+        BridgeCaptureCoordinator.StatusListener {
+
+        private final WeakReference<InputMethodService> serviceRef;
+        private final String packageName;
+        private final ImeWindowCaptureHost host;
+        private final BridgeCaptureCoordinator coordinator;
+        private BridgeCaptureStatus hostStatus = BridgeCaptureStatus.unsupported("not attached");
+        private BridgeCaptureStatus captureStatus = BridgeCaptureStatus.unsupported("not attached");
+
+        CaptureRuntime(InputMethodService service, String packageName) {
+            this.serviceRef = new WeakReference<>(service);
+            this.packageName = packageName;
+            this.host = new ImeWindowCaptureHost(this, packageName);
+            this.coordinator = new BridgeCaptureCoordinator(
+                this,
+                new BridgePcmSessionClient(service),
+                new PcmAudioRecorder(service),
+                this
+            );
+        }
+
+        void attachLater() {
+            InputMethodService service = serviceRef.get();
+            if (service != null) host.attachLater(service);
+        }
+
+        void cancel(String reason) {
+            coordinator.cancelActiveCapture(reason);
+            host.updateCaptureStatus(BridgeCaptureStatus.ready(reason));
+        }
+
+        void detach(String reason) {
+            coordinator.cancelActiveCapture(reason);
+            host.detach();
+        }
+
+        void destroy() {
+            coordinator.destroy();
+            host.detach();
+        }
+
+        boolean supportsPcmRecording() {
+            boolean hostReady = hostStatus.supportsPcmRecording() ||
+                (host.isAttached() && isTransientHostUnsupported(hostStatus));
+            return host.isAttached() &&
+                hasInputConnection() &&
+                !isSensitiveField() &&
+                hostReady;
+        }
+
+        BridgeCaptureStatus currentStatus() {
+            if (captureStatus != null && captureStatus.state == BridgeCaptureStatus.State.FAILED) {
+                return captureStatus;
+            }
+            return hostStatus != null ? hostStatus : captureStatus;
+        }
+
+        @Override
+        public void onCaptureHoldStarted() {
+            coordinator.startCapture();
+        }
+
+        @Override
+        public void onCaptureHoldReleased() {
+            coordinator.finishCapture();
+        }
+
+        @Override
+        public void onCaptureHoldCancelled() {
+            coordinator.cancelActiveCapture("gesture cancelled");
+        }
+
+        @Override
+        public void onCaptureHostStatusChanged(BridgeCaptureStatus status) {
+            hostStatus = status;
+            if (status != null && status.state == BridgeCaptureStatus.State.READY) {
+                coordinator.markReady(status.message);
+            } else if (isTerminalHostUnsupported(status)) {
+                coordinator.markUnsupported(status.message);
+            }
+        }
+
+        private boolean isTerminalHostUnsupported(BridgeCaptureStatus status) {
+            if (status == null || status.state != BridgeCaptureStatus.State.UNSUPPORTED) return false;
+            String message = status.message == null ? "" : status.message;
+            return message.startsWith("attach failed") ||
+                "not attached".equals(message) ||
+                "no input method service".equals(message) ||
+                "unsupported ime window root".equals(message);
+        }
+
+        private boolean isTransientHostUnsupported(BridgeCaptureStatus status) {
+            if (status == null || status.state != BridgeCaptureStatus.State.UNSUPPORTED) return false;
+            return "ime window not ready".equals(status.message);
+        }
+
+        @Override
+        public boolean hasInputConnection() {
+            InputMethodService service = serviceRef.get();
+            if (service == null) return false;
+            try {
+                return service.getCurrentInputConnection() != null;
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": capture getCurrentInputConnection failed for " +
+                    packageName + ": " + t);
+                return false;
+            }
+        }
+
+        @Override
+        public boolean isSensitiveField() {
+            return isSensitiveEditor(activeEditorInfo);
+        }
+
+        @Override
+        public void onCaptureStatusChanged(BridgeCaptureStatus status) {
+            captureStatus = status;
+            host.updateCaptureStatus(status);
         }
     }
 
@@ -583,9 +757,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
 
         private boolean isSessionAccepted(String sessionId) {
-            if (activeSessionId == null || activeSessionId.length() == 0) return true;
-            if (sessionId == null || sessionId.length() == 0) return true;
-            return activeSessionId.equals(sessionId);
+            return BridgeSessionGate.accepts(activeSessionId, sessionId);
         }
 
         private boolean clearComposingPreviewIfOwned(InputConnection inputConnection) {
@@ -663,6 +835,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
 
         private void fillStatusExtras(Bundle extras, InputMethodService service, InputConnection inputConnection) {
+            CaptureRuntime captureRuntime = getCaptureRuntime(service);
             extras.putString(BridgeContract.EXTRA_TARGET_PACKAGE, packageName);
             extras.putString(BridgeContract.EXTRA_MODULE_VERSION, BridgeContract.MODULE_VERSION);
             extras.putBoolean(BridgeContract.EXTRA_HAS_INPUT_CONNECTION, inputConnection != null);
@@ -672,6 +845,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_COMPOSING_PREVIEW, true);
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_FINISH_COMPOSING_TEXT, true);
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_SESSIONS, true);
+            extras.putBoolean(
+                BridgeContract.EXTRA_SUPPORTS_PCM_RECORDING,
+                captureRuntime != null && captureRuntime.supportsPcmRecording()
+            );
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_INPUT_CONTEXT, true);
             if (activeSessionId != null) {
                 extras.putString(BridgeContract.EXTRA_ACTIVE_SESSION_ID, activeSessionId);
@@ -682,6 +859,14 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
             if (lastError != null && lastError.length() > 0) {
                 extras.putString(BridgeContract.EXTRA_LAST_ERROR, lastError);
+            } else if (captureRuntime != null) {
+                BridgeCaptureStatus captureStatus = captureRuntime.currentStatus();
+                if (captureStatus != null &&
+                    captureStatus.message != null &&
+                    captureStatus.message.length() > 0 &&
+                    captureStatus.state != BridgeCaptureStatus.State.READY) {
+                    extras.putString(BridgeContract.EXTRA_LAST_ERROR, captureStatus.message);
+                }
             }
         }
 

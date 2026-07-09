@@ -1,4 +1,12 @@
 <resources>
     <string name="app_name">BiBi IME Bridge</string>
     <string name="xposed_description">Bridge BiBi floating ASR results and optional input-field context through the hooked input method via InputConnection.</string>
+    <string name="bridge_visual_title">Bridge visual settings</string>
+    <string name="bridge_visual_summary">Adjust the bottom capture area used by hooked input methods. Changes are best-effort in LSPosed/LSPatch and fall back safely to defaults if the hook process cannot read them.</string>
+    <string name="bridge_visual_preview_title">Preview</string>
+    <string name="bridge_visual_preview_idle">Idle</string>
+    <string name="bridge_visual_preview_recording">Recording</string>
+    <string name="bridge_visual_width_value">Capture width: %1$d dp</string>
+    <string name="bridge_visual_height_value">Capture height: %1$d dp (also lifts the strip from the bottom edge)</string>
+    <string name="bridge_visual_restore_defaults">Restore defaults</string>
 </resources>
