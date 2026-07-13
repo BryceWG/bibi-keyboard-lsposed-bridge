@@ -1,0 +1,31 @@
+package com.brycewg.asrkb.imebridge;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
+public class BridgeContractTest {
+    @Test
+    public void mainAppPackagesPreferProThenOpenSource() {
+        assertArrayEquals(
+            new String[] {
+                BridgeContract.PACKAGE_PRO,
+                BridgeContract.PACKAGE_OPEN_SOURCE
+            },
+            BridgeContract.MAIN_APP_PACKAGES
+        );
+    }
+
+    @Test
+    public void permissionMappingKeepsSeparatePackageOwners() {
+        assertEquals(
+            BridgeContract.PERMISSION_PRO,
+            BridgeContract.permissionForAppPackage(BridgeContract.PACKAGE_PRO)
+        );
+        assertEquals(
+            BridgeContract.PERMISSION_OPEN_SOURCE,
+            BridgeContract.permissionForAppPackage(BridgeContract.PACKAGE_OPEN_SOURCE)
+        );
+    }
+}

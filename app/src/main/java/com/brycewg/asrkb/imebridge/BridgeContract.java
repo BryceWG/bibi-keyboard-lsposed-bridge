@@ -12,8 +12,8 @@ final class BridgeContract {
     static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
     static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
     static final String[] MAIN_APP_PACKAGES = {
-        PACKAGE_OPEN_SOURCE,
-        PACKAGE_PRO
+        PACKAGE_PRO,
+        PACKAGE_OPEN_SOURCE
     };
     static final String PERMISSION_OPEN_SOURCE = "com.brycewg.asrkb.permission.IME_BRIDGE";
     static final String PERMISSION_PRO = "com.brycewg.asrkb.pro.permission.IME_BRIDGE";
