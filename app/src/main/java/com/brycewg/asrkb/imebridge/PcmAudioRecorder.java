@@ -18,6 +18,7 @@ final class PcmAudioRecorder implements BridgeCaptureCoordinator.AudioRecorder {
     static final int CHANNELS = 1;
 
     private final Context context;
+    private final BridgeRecordingAudioFocusController audioFocusController;
     private final Object lock = new Object();
     private AudioRecord audioRecord;
     private Thread readThread;
@@ -27,10 +28,18 @@ final class PcmAudioRecorder implements BridgeCaptureCoordinator.AudioRecorder {
 
     PcmAudioRecorder(Context context) {
         this.context = context == null ? null : context.getApplicationContext();
+        this.audioFocusController = new BridgeRecordingAudioFocusController(
+            this.context,
+            change -> notifyAudioFocusLost()
+        );
     }
 
     @Override
-    public boolean start(String sessionId, BridgeCaptureCoordinator.AudioRecorderCallback callback) {
+    public boolean start(
+        String sessionId,
+        boolean requestAudioFocus,
+        BridgeCaptureCoordinator.AudioRecorderCallback callback
+    ) {
         synchronized (lock) {
             if (running) return false;
             if (context == null || !hasRecordAudioPermission()) return false;
@@ -41,24 +50,32 @@ final class PcmAudioRecorder implements BridgeCaptureCoordinator.AudioRecorder {
             );
             if (minBuffer <= 0) return false;
             int bufferSize = Math.max(minBuffer * 2, SAMPLE_RATE / 2);
-            AudioRecord record;
+            AudioRecord record = null;
             try {
                 record = createAudioRecord(bufferSize);
                 if (record.getState() != AudioRecord.STATE_INITIALIZED) {
                     releaseQuietly(record);
                     return false;
                 }
+                this.callback = callback;
+                this.activeSessionId = sessionId;
+                if (requestAudioFocus) audioFocusController.acquire();
                 record.startRecording();
                 if (record.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                    audioFocusController.release();
+                    this.callback = null;
+                    this.activeSessionId = null;
                     releaseQuietly(record);
                     return false;
                 }
             } catch (Throwable t) {
+                audioFocusController.release();
+                this.callback = null;
+                this.activeSessionId = null;
+                if (record != null) releaseQuietly(record);
                 return false;
             }
             this.audioRecord = record;
-            this.callback = callback;
-            this.activeSessionId = sessionId;
             this.running = true;
             this.readThread = new Thread(new Runnable() {
                 @Override
@@ -153,6 +170,12 @@ final class PcmAudioRecorder implements BridgeCaptureCoordinator.AudioRecorder {
         if (cb != null && sessionId != null) cb.onRecorderError(sessionId, message);
     }
 
+    private void notifyAudioFocusLost() {
+        BridgeCaptureCoordinator.AudioRecorderCallback cb = callback;
+        String sessionId = activeSessionId;
+        if (cb != null && sessionId != null) cb.onAudioFocusLost(sessionId);
+    }
+
     private boolean hasRecordAudioPermission() {
         if (Build.VERSION.SDK_INT < 23) return true;
         try {
@@ -167,7 +190,6 @@ final class PcmAudioRecorder implements BridgeCaptureCoordinator.AudioRecorder {
         AudioRecord record;
         Thread thread;
         synchronized (lock) {
-            if (!running && audioRecord == null) return;
             running = false;
             record = audioRecord;
             thread = readThread;
@@ -176,6 +198,7 @@ final class PcmAudioRecorder implements BridgeCaptureCoordinator.AudioRecorder {
             activeSessionId = null;
             callback = null;
         }
+        audioFocusController.release();
         if (record != null) {
             try {
                 record.stop();

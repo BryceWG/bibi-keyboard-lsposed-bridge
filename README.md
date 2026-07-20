@@ -55,6 +55,14 @@ pushes PCM16 mono frames to the BiBi app's bridge PCM session service. Releasing
 finishes the session; gesture cancel, `onFinishInput`, `onWindowHidden`, and
 `onDestroy` cancel the active session and stop local recording.
 
+With BiBi and bridge module versions that support the audio-focus policy field,
+the hooked IME also follows BiBi's “Audio ducking during recording” setting. It
+requests transient exclusive audio focus immediately before `AudioRecord`
+starts, releases it on every finish/cancel/error path, and finishes capture so
+the collected PCM can still be recognized if that focus is subsequently lost.
+Older BiBi versions omit the policy field, so
+the module keeps the previous no-ducking behavior for compatibility.
+
 Because Android touch dispatch requires the injected view to own the initial
 `ACTION_DOWN` in order to receive release/cancel events, the first version keeps
 this area intentionally small (`18dp` at the bottom edge). Taps inside that tiny

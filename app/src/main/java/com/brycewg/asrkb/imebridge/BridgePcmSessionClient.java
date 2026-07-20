@@ -223,8 +223,12 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
     private BridgeCaptureCoordinator.OperationResult readResult(Parcel reply) {
         int code = reply.readInt();
         String message = reply.readString();
+        boolean requestAudioFocus = reply.dataAvail() >= Integer.BYTES && reply.readInt() != 0;
         if (code == BridgeContract.PCM_RESULT_OK) {
-            return BridgeCaptureCoordinator.OperationResult.ok(message == null ? "ok" : message);
+            return BridgeCaptureCoordinator.OperationResult.ok(
+                message == null ? "ok" : message,
+                requestAudioFocus
+            );
         }
         return BridgeCaptureCoordinator.OperationResult.error(
             code,

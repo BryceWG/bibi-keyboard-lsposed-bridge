@@ -29,7 +29,7 @@ final class BridgeCaptureCoordinator {
     }
 
     interface AudioRecorder {
-        boolean start(String sessionId, AudioRecorderCallback callback);
+        boolean start(String sessionId, boolean requestAudioFocus, AudioRecorderCallback callback);
         void stop();
         void cancel();
         boolean isRecording();
@@ -37,24 +37,31 @@ final class BridgeCaptureCoordinator {
 
     interface AudioRecorderCallback {
         void onPcmFrame(String sessionId, byte[] pcm, int sampleRate, int channels, int amplitude);
+        void onAudioFocusLost(String sessionId);
         void onRecorderError(String sessionId, String message);
     }
 
     static final class OperationResult {
         final int code;
         final String message;
+        final boolean requestAudioFocus;
 
-        private OperationResult(int code, String message) {
+        private OperationResult(int code, String message, boolean requestAudioFocus) {
             this.code = code;
             this.message = message == null ? "" : message;
+            this.requestAudioFocus = requestAudioFocus;
         }
 
         static OperationResult ok(String message) {
-            return new OperationResult(BridgeContract.PCM_RESULT_OK, message);
+            return ok(message, false);
+        }
+
+        static OperationResult ok(String message, boolean requestAudioFocus) {
+            return new OperationResult(BridgeContract.PCM_RESULT_OK, message, requestAudioFocus);
         }
 
         static OperationResult error(int code, String message) {
-            return new OperationResult(code, message);
+            return new OperationResult(code, message, false);
         }
 
         boolean isSuccess() {
@@ -237,10 +244,15 @@ final class BridgeCaptureCoordinator {
             return;
         }
 
-        boolean started = recorder.start(sessionId, new AudioRecorderCallback() {
+        boolean started = recorder.start(sessionId, begin.requestAudioFocus, new AudioRecorderCallback() {
             @Override
             public void onPcmFrame(String frameSessionId, byte[] pcm, int sampleRate, int channels, int amplitude) {
                 handleFrame(frameSessionId, pcm, sampleRate, channels, amplitude);
+            }
+
+            @Override
+            public void onAudioFocusLost(String focusSessionId) {
+                handleAudioFocusLost(focusSessionId);
             }
 
             @Override
@@ -320,6 +332,14 @@ final class BridgeCaptureCoordinator {
                 cancelSession(sessionId, message);
             }
         });
+    }
+
+    private void handleAudioFocusLost(String sessionId) {
+        synchronized (lock) {
+            if (activeSessionId == null || !activeSessionId.equals(sessionId)) return;
+            if (state != State.STARTING && state != State.RECORDING) return;
+        }
+        finishCapture();
     }
 
     private void finishSession(String sessionId) {

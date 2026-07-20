@@ -40,6 +40,34 @@ public class BridgeCaptureCoordinatorTest {
     }
 
     @Test
+    public void beginAudioFocusPolicyIsForwardedToRecorder() {
+        FakeEnvironment environment = new FakeEnvironment();
+        FakeSessionClient client = new FakeSessionClient();
+        client.requestAudioFocus = true;
+        FakeRecorder recorder = new FakeRecorder(true);
+        BridgeCaptureCoordinator coordinator = newCoordinator(environment, client, recorder, new Statuses());
+
+        coordinator.startCapture();
+
+        assertTrue(recorder.requestAudioFocus);
+    }
+
+    @Test
+    public void audioFocusLossFinishesRecordingAndKeepsCapturedAudio() {
+        FakeEnvironment environment = new FakeEnvironment();
+        FakeSessionClient client = new FakeSessionClient();
+        FakeRecorder recorder = new FakeRecorder(true);
+        BridgeCaptureCoordinator coordinator = newCoordinator(environment, client, recorder, new Statuses());
+
+        coordinator.startCapture();
+        recorder.focusLost();
+
+        assertEquals(1, client.finishCalls);
+        assertEquals(0, client.cancelCalls);
+        assertEquals(1, recorder.stopCalls);
+    }
+
+    @Test
     public void cancelStopsRecorderCancelsSessionAndRejectsLateFrames() {
         FakeEnvironment environment = new FakeEnvironment();
         FakeSessionClient client = new FakeSessionClient();
@@ -241,12 +269,13 @@ public class BridgeCaptureCoordinatorTest {
         int finishCalls;
         int cancelCalls;
         String activeSessionId;
+        boolean requestAudioFocus;
 
         @Override
         public BridgeCaptureCoordinator.OperationResult begin(String sessionId) {
             beginCalls++;
             activeSessionId = sessionId;
-            return BridgeCaptureCoordinator.OperationResult.ok("ok");
+            return BridgeCaptureCoordinator.OperationResult.ok("ok", requestAudioFocus);
         }
 
         @Override
@@ -308,17 +337,23 @@ public class BridgeCaptureCoordinatorTest {
         boolean recording;
         String sessionId;
         BridgeCaptureCoordinator.AudioRecorderCallback callback;
+        boolean requestAudioFocus;
 
         FakeRecorder(boolean startResult) {
             this.startResult = startResult;
         }
 
         @Override
-        public boolean start(String sessionId, BridgeCaptureCoordinator.AudioRecorderCallback callback) {
+        public boolean start(
+            String sessionId,
+            boolean requestAudioFocus,
+            BridgeCaptureCoordinator.AudioRecorderCallback callback
+        ) {
             startCalls++;
             if (!startResult) return false;
             this.recording = true;
             this.sessionId = sessionId;
+            this.requestAudioFocus = requestAudioFocus;
             this.callback = callback;
             return true;
         }
@@ -349,6 +384,12 @@ public class BridgeCaptureCoordinatorTest {
         void error(String message) {
             if (callback != null && sessionId != null) {
                 callback.onRecorderError(sessionId, message);
+            }
+        }
+
+        void focusLost() {
+            if (callback != null && sessionId != null) {
+                callback.onAudioFocusLost(sessionId);
             }
         }
     }
