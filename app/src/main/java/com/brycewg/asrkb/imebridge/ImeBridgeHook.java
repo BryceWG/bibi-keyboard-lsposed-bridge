@@ -414,9 +414,9 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 if (!CLIPBOARD_OBSERVERS.hasSubscribers()) return;
                 InputMethodService service = activeServiceRef.get();
                 Context ctx = service != null ? service : context;
-                String text = readClipboardText(ctx);
-                if (text == null || text.length() == 0) return;
                 boolean sensitive = isClipboardSensitive(ctx);
+                String text = sensitive ? "" : readClipboardText(ctx);
+                if (!sensitive && (text == null || text.length() == 0)) return;
                 String imePackage = service != null ? service.getPackageName() : null;
                 sendClipboardTextChanged(ctx, imePackage, text, sensitive);
             };
@@ -448,7 +448,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         String text,
         boolean sensitive
     ) {
-        if (context == null || text == null) return;
+        if (context == null || (!sensitive && text == null)) return;
         for (ClipboardObserveRegistry.Subscription subscription : CLIPBOARD_OBSERVERS.snapshot()) {
             String appPackageName = subscription.appPackageName;
             try {
@@ -458,7 +458,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
                 intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, imePackageName);
                 if (!sensitive) intent.putExtra(BridgeContract.EXTRA_TEXT, text);
-                intent.putExtra(BridgeContract.EXTRA_CLIPBOARD_TEXT_CHARS, text.length());
+                intent.putExtra(
+                    BridgeContract.EXTRA_CLIPBOARD_TEXT_CHARS,
+                    sensitive ? 0 : text.length()
+                );
                 intent.putExtra(BridgeContract.EXTRA_IS_CLIPBOARD_SENSITIVE, sensitive);
                 intent.putExtra(
                     BridgeContract.EXTRA_CLIPBOARD_SUBSCRIPTION_TOKEN,
