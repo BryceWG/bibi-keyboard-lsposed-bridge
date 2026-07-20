@@ -30,6 +30,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final String TAG = "BiBiImeBridge";
+    private static final HookInstallGate HOOK_INSTALL_GATE = new HookInstallGate();
     private static final Map<InputMethodService, List<BridgeReceiver>> RECEIVERS = new WeakHashMap<>();
     private static final Map<InputMethodService, CaptureRuntime> CAPTURE_RUNTIMES = new WeakHashMap<>();
 
@@ -46,22 +47,27 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             return;
         }
 
+        if (!HOOK_INSTALL_GATE.tryInstall(lpparam.packageName)) {
+            XposedBridge.log(TAG + ": skip duplicate hook install for " + lpparam.packageName +
+                ", already installed for " + HOOK_INSTALL_GATE.getInstalledPackage());
+            return;
+        }
         try {
             XposedBridge.log(TAG + ": module " + BridgeContract.MODULE_VERSION +
                 " loading for " + lpparam.packageName);
-            hookInputMethodService(lpparam.packageName);
+            hookInputMethodService();
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": failed to install hooks for " + lpparam.packageName + ": " + t);
         }
     }
 
-    private static void hookInputMethodService(final String packageName) {
+    private static void hookInputMethodService() {
         XposedHelpers.findAndHookMethod(InputMethodService.class, "onCreate", new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 InputMethodService service = asImeService(param.thisObject);
                 if (service == null) return;
-                registerBridgeReceiver(service, packageName);
+                registerBridgeReceiver(service, resolveHostPackage(service));
             }
         });
 
@@ -83,8 +89,9 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                         ? (EditorInfo) param.args[0]
                         : null;
                     imeWindowVisible = safeIsInputViewShown(service);
-                    registerBridgeReceiver(service, packageName);
-                    attachCaptureRuntime(service, packageName);
+                    String hostPackage = resolveHostPackage(service);
+                    registerBridgeReceiver(service, hostPackage);
+                    attachCaptureRuntime(service, hostPackage);
                     if (!restarting) resetBridgeReceiverPreview(service);
                 }
             }
@@ -109,9 +116,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 if (service == null) return;
                 activeServiceRef = new WeakReference<>(service);
                 imeWindowVisible = true;
-                registerBridgeReceiver(service, packageName);
-                attachCaptureRuntime(service, packageName);
-                sendImeWindowVisibility(service, packageName, true);
+                String hostPackage = resolveHostPackage(service);
+                registerBridgeReceiver(service, hostPackage);
+                attachCaptureRuntime(service, hostPackage);
+                sendImeWindowVisibility(service, hostPackage, true);
             }
         });
 
@@ -124,7 +132,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     imeWindowVisible = false;
                 }
                 detachCaptureRuntime(service, "window hidden");
-                sendImeWindowVisibility(service, packageName, false);
+                sendImeWindowVisibility(service, resolveHostPackage(service), false);
             }
         });
 
@@ -147,6 +155,16 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
     private static InputMethodService asImeService(Object value) {
         return value instanceof InputMethodService ? (InputMethodService) value : null;
+    }
+
+    private static String resolveHostPackage(InputMethodService service) {
+        String servicePackage = null;
+        try {
+            if (service != null) servicePackage = service.getPackageName();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": resolve host package from service failed: " + t);
+        }
+        return HOOK_INSTALL_GATE.resolveHostPackage(servicePackage);
     }
 
     private static synchronized void registerBridgeReceiver(InputMethodService service, String packageName) {

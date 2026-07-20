@@ -34,6 +34,7 @@ final class BridgeCaptureDiagnostic {
     static String reasonCode(String reason) {
         if (reason == null || reason.length() == 0) return "none";
         String normalized = reason.toLowerCase();
+        if (normalized.contains("not attached")) return "not_attached";
         if (normalized.contains("attached") || normalized.contains("ready")) return "none";
         if (normalized.contains("permission")) return "microphone_permission";
         if (normalized.contains("audio record")) return "audio_record_failed";

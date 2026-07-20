@@ -1,7 +1,7 @@
 id=com.brycewg.asrkb.imebridge
 name=BiBi IME Bridge
-version=0.2.2
-versionCode=15
+version=0.2.3
+versionCode=16
 author=Bryce
 description=Bridge BiBi ASR text, input context, and hooked-IME PCM recording with audio ducking.
 minApi=82

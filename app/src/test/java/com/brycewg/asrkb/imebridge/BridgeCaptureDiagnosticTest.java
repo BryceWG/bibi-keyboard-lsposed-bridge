@@ -45,4 +45,17 @@ public class BridgeCaptureDiagnosticTest {
         assertFalse(summary.contains("password=123"));
         assertFalse(summary.contains("token=abc"));
     }
+
+    @Test
+    public void notAttachedIsReportedAsDetachedInsteadOfSuccess() {
+        assertTrue(
+            BridgeCaptureDiagnostic.summary(
+                "com.tencent.wetype",
+                BridgeCaptureStatus.unsupported("not attached"),
+                0,
+                "none",
+                "not attached"
+            ).contains("failureReason=not_attached")
+        );
+    }
 }
