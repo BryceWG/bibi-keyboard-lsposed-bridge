@@ -9,4 +9,11 @@
     <string name="bridge_visual_width_value">Capture width: %1$d dp</string>
     <string name="bridge_visual_height_value">Capture height: %1$d dp (also lifts the strip from the bottom edge)</string>
     <string name="bridge_visual_restore_defaults">Restore defaults</string>
+    <string name="bridge_language_title">Language</string>
+    <string name="bridge_language_summary">Choose the language used by this settings screen. It does not affect hooked input methods.</string>
+    <string name="bridge_language_change">Change language</string>
+    <string name="bridge_language_system">Follow system</string>
+    <string name="bridge_language_english">English</string>
+    <string name="bridge_language_zh_cn">简体中文</string>
+    <string name="bridge_language_zh_tw">繁體中文</string>
 </resources>

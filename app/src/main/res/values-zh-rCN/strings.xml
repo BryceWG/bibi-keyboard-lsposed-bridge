@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">BiBi 输入法桥接</string>
+    <string name="xposed_description">通过被 Hook 的输入法，将说点啥悬浮球识别结果与可选的输入框上下文经 InputConnection 桥接回填。</string>
+    <string name="bridge_visual_title">桥接视觉设置</string>
+    <string name="bridge_visual_summary">调整被 Hook 输入法使用的底部录音触发区域。在 LSPosed/LSPatch 中修改会尽力生效；若 Hook 进程无法读取设置，将安全回退到默认值。</string>
+    <string name="bridge_visual_preview_title">预览</string>
+    <string name="bridge_visual_preview_idle">空闲</string>
+    <string name="bridge_visual_preview_recording">录音中</string>
+    <string name="bridge_visual_width_value">触发区宽度：%1$d dp</string>
+    <string name="bridge_visual_height_value">触发区高度：%1$d dp（同时会将条带从底边上移）</string>
+    <string name="bridge_visual_restore_defaults">恢复默认</string>
+    <string name="bridge_language_title">语言</string>
+    <string name="bridge_language_summary">选择本设置页使用的语言，不影响被 Hook 的输入法。</string>
+    <string name="bridge_language_change">更改语言</string>
+    <string name="bridge_language_system">跟随系统</string>
+    <string name="bridge_language_english">English</string>
+    <string name="bridge_language_zh_cn">简体中文</string>
+    <string name="bridge_language_zh_tw">繁體中文</string>
+</resources>

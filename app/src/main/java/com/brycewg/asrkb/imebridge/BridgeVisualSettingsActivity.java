@@ -1,11 +1,13 @@
 /*
- * Simple native settings screen for bridge capture strip visuals.
+ * Simple native settings screen for bridge capture strip visuals and language.
  *
  * Module: lsposed-ime-bridge
  */
 package com.brycewg.asrkb.imebridge;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -20,10 +22,16 @@ public final class BridgeVisualSettingsActivity extends Activity {
     private BridgeVisualPrefs.VisualConfig visualConfig;
     private TextView widthLabel;
     private TextView heightLabel;
+    private TextView languageValue;
     private BridgeWaveformPreviewView idlePreview;
     private BridgeWaveformPreviewView recordingPreview;
     private SeekBar widthSeekBar;
     private SeekBar heightSeekBar;
+
+    @Override
+    protected void attachBaseContext(Context newBase) {
+        super.attachBaseContext(BridgeLocaleHelper.wrap(newBase));
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,7 +64,8 @@ public final class BridgeVisualSettingsActivity extends Activity {
         summaryParams.topMargin = dp(8);
         content.addView(summary, summaryParams);
 
-        content.addView(createPreviewPanel(), topMargin(dp(22)));
+        content.addView(createLanguagePanel(), topMargin(dp(22)));
+        content.addView(createPreviewPanel(), topMargin(dp(16)));
         content.addView(createSliderPanel(), topMargin(dp(16)));
 
         Button resetButton = new Button(this);
@@ -69,6 +78,68 @@ public final class BridgeVisualSettingsActivity extends Activity {
         content.addView(resetButton, topMargin(dp(18)));
 
         setContentView(scrollView);
+    }
+
+    private LinearLayout createLanguagePanel() {
+        LinearLayout panel = createPanel();
+        TextView label = sectionLabel(R.string.bridge_language_title);
+        panel.addView(label, matchWrap());
+
+        TextView summary = smallLabel(R.string.bridge_language_summary);
+        panel.addView(summary, topMargin(dp(6)));
+
+        languageValue = sectionLabel(0);
+        languageValue.setText(labelForLanguageTag(BridgeLocalePrefs.read(this)));
+        languageValue.setTypeface(languageValue.getTypeface(), android.graphics.Typeface.NORMAL);
+        languageValue.setTextSize(15);
+        panel.addView(languageValue, topMargin(dp(12)));
+
+        Button changeButton = new Button(this);
+        changeButton.setText(R.string.bridge_language_change);
+        changeButton.setMinHeight(dp(48));
+        changeButton.setAllCaps(false);
+        changeButton.setOnClickListener(v -> showLanguagePicker());
+        panel.addView(changeButton, topMargin(dp(10)));
+        return panel;
+    }
+
+    private void showLanguagePicker() {
+        String[] tags = BridgeLocalePrefs.supportedTags();
+        CharSequence[] labels = new CharSequence[tags.length];
+        String current = BridgeLocalePrefs.read(this);
+        int checked = 0;
+        for (int i = 0; i < tags.length; i++) {
+            labels[i] = labelForLanguageTag(tags[i]);
+            if (tags[i].equals(current)) checked = i;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.bridge_language_title)
+            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                String selected = tags[which];
+                if (!selected.equals(BridgeLocalePrefs.read(this))) {
+                    BridgeLocalePrefs.save(this, selected);
+                    dialog.dismiss();
+                    recreate();
+                    return;
+                }
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private String labelForLanguageTag(String tag) {
+        String normalized = BridgeLocalePrefs.normalize(tag);
+        if (BridgeLocalePrefs.TAG_EN.equals(normalized)) {
+            return getString(R.string.bridge_language_english);
+        }
+        if (BridgeLocalePrefs.TAG_ZH_CN.equals(normalized)) {
+            return getString(R.string.bridge_language_zh_cn);
+        }
+        if (BridgeLocalePrefs.TAG_ZH_TW.equals(normalized)) {
+            return getString(R.string.bridge_language_zh_tw);
+        }
+        return getString(R.string.bridge_language_system);
     }
 
     private LinearLayout createPreviewPanel() {
