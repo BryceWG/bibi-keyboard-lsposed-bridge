@@ -1,16 +1,24 @@
 <resources>
     <string name="app_name">BiBi 輸入法橋接</string>
     <string name="xposed_description">透過被 Hook 的輸入法，將說點啥懸浮球辨識結果與可選的輸入欄位上下文經 InputConnection 橋接回填。</string>
-    <string name="bridge_visual_title">橋接視覺設定</string>
+    <string name="bridge_visual_title">橋接模块設定</string>
     <string name="bridge_visual_summary">調整被 Hook 輸入法使用的底部錄音觸發區域。在 LSPosed/LSPatch 中修改會盡力生效；若 Hook 程序無法讀取設定，將安全回退到預設值。</string>
     <string name="bridge_visual_preview_title">預覽</string>
     <string name="bridge_visual_preview_idle">閒置</string>
     <string name="bridge_visual_preview_recording">錄音中</string>
     <string name="bridge_visual_width_value">觸發區寬度：%1$d dp</string>
     <string name="bridge_visual_height_value">觸發區高度：%1$d dp（同時會將條帶從底邊上移）</string>
+    <string name="bridge_visual_width_label">寬度</string>
+    <string name="bridge_visual_height_label">高度</string>
+    <string name="bridge_visual_dp_value">%1$d dp</string>
+    <string name="bridge_visual_height_hint">同時會將條帶從底邊上移</string>
     <string name="bridge_visual_restore_defaults">恢復預設</string>
+    <string name="bridge_docs_title">介紹與使用文件</string>
+    <string name="bridge_docs_summary">查看模組說明、安裝步驟與故障排除</string>
+    <string name="bridge_docs_url">https://bibidocs.brycewg.com/advanced/ime-bridge.html</string>
+    <string name="bridge_docs_open_failed">無法開啟文件連結</string>
     <string name="bridge_language_title">語言</string>
-    <string name="bridge_language_summary">選擇本設定頁使用的語言，不影響被 Hook 的輸入法。</string>
+    <string name="bridge_language_summary">僅作用於本設定頁，不影響被 Hook 的輸入法。</string>
     <string name="bridge_language_change">變更語言</string>
     <string name="bridge_language_system">跟隨系統</string>
     <string name="bridge_language_english">English</string>

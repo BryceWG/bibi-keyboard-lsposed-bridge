@@ -1,5 +1,5 @@
 /*
- * Simple native settings screen for bridge capture strip visuals and language.
+ * Settings screen for bridge capture-strip visuals and display language.
  *
  * Module: lsposed-ime-bridge
  */
@@ -8,20 +8,30 @@ package com.brycewg.asrkb.imebridge;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public final class BridgeVisualSettingsActivity extends Activity {
     private BridgeVisualPrefs.VisualConfig visualConfig;
-    private TextView widthLabel;
-    private TextView heightLabel;
+    private TextView widthValue;
+    private TextView heightValue;
     private TextView languageValue;
     private BridgeWaveformPreviewView idlePreview;
     private BridgeWaveformPreviewView recordingPreview;
@@ -40,67 +50,349 @@ public final class BridgeVisualSettingsActivity extends Activity {
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
+        scrollView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        scrollView.setBackgroundColor(color(R.color.bridge_bg));
+        scrollView.setClipToPadding(false);
+
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(24), dp(20), dp(32));
+        content.setPadding(dp(20), dp(16), dp(20), dp(28));
         scrollView.addView(content, new ScrollView.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
+        content.addView(createHeader());
+        content.addView(createDocsButton(), topMargin(dp(24)));
+        content.addView(createLanguageCard(), topMargin(dp(14)));
+        content.addView(createPreviewCard(), topMargin(dp(14)));
+        content.addView(createSizeCard(), topMargin(dp(14)));
+        content.addView(createResetButton(), topMargin(dp(20)));
+
+        setContentView(scrollView);
+        applySystemBarInsets(scrollView);
+    }
+
+    private void applySystemBarInsets(View root) {
+        final int extraTop = dp(12);
+        final int extraBottom = dp(12);
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int topInset;
+            int bottomInset;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.graphics.Insets systemBars = insets.getInsets(
+                    android.view.WindowInsets.Type.systemBars()
+                );
+                topInset = systemBars.top;
+                bottomInset = systemBars.bottom;
+            } else {
+                topInset = insets.getSystemWindowInsetTop();
+                bottomInset = insets.getSystemWindowInsetBottom();
+            }
+            v.setPadding(0, topInset + extraTop, 0, bottomInset + extraBottom);
+            return insets;
+        });
+        root.requestApplyInsets();
+    }
+
+    private LinearLayout createHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+
+        TextView eyebrow = new TextView(this);
+        eyebrow.setText(R.string.app_name);
+        eyebrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        eyebrow.setLetterSpacing(0.04f);
+        eyebrow.setAllCaps(true);
+        eyebrow.setTextColor(color(R.color.bridge_accent));
+        eyebrow.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        header.addView(eyebrow, matchWrap());
+
         TextView title = new TextView(this);
         title.setText(R.string.bridge_visual_title);
-        title.setTextSize(24);
-        title.setTextColor(resolveTextColor(android.R.attr.textColorPrimary, Color.rgb(28, 28, 28)));
-        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
-        content.addView(title, matchWrap());
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        title.setTextColor(color(R.color.bridge_text_primary));
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setLetterSpacing(-0.015f);
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.topMargin = dp(6);
+        header.addView(title, titleParams);
 
         TextView summary = new TextView(this);
         summary.setText(R.string.bridge_visual_summary);
-        summary.setTextSize(14);
-        summary.setLineSpacing(0f, 1.12f);
-        summary.setTextColor(resolveTextColor(android.R.attr.textColorSecondary, Color.rgb(96, 96, 96)));
+        summary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        summary.setLineSpacing(dp(2), 1f);
+        summary.setTextColor(color(R.color.bridge_text_secondary));
         LinearLayout.LayoutParams summaryParams = matchWrap();
-        summaryParams.topMargin = dp(8);
-        content.addView(summary, summaryParams);
-
-        content.addView(createLanguagePanel(), topMargin(dp(22)));
-        content.addView(createPreviewPanel(), topMargin(dp(16)));
-        content.addView(createSliderPanel(), topMargin(dp(16)));
-
-        Button resetButton = new Button(this);
-        resetButton.setText(R.string.bridge_visual_restore_defaults);
-        resetButton.setMinHeight(dp(48));
-        resetButton.setAllCaps(false);
-        resetButton.setOnClickListener(v -> {
-            applyConfig(BridgeVisualPrefs.defaults(), true);
-        });
-        content.addView(resetButton, topMargin(dp(18)));
-
-        setContentView(scrollView);
+        summaryParams.topMargin = dp(10);
+        header.addView(summary, summaryParams);
+        return header;
     }
 
-    private LinearLayout createLanguagePanel() {
-        LinearLayout panel = createPanel();
-        TextView label = sectionLabel(R.string.bridge_language_title);
-        panel.addView(label, matchWrap());
+    private LinearLayout createDocsButton() {
+        LinearLayout button = new LinearLayout(this);
+        button.setOrientation(LinearLayout.VERTICAL);
+        button.setGravity(Gravity.START);
+        button.setPadding(dp(20), dp(18), dp(20), dp(18));
+        button.setMinimumHeight(dp(72));
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setBackground(filledAccentRipple(dp(20)));
+        button.setOnClickListener(v -> openDocs());
 
-        TextView summary = smallLabel(R.string.bridge_language_summary);
-        panel.addView(summary, topMargin(dp(6)));
+        TextView title = new TextView(this);
+        title.setText(R.string.bridge_docs_title);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setTextColor(Color.WHITE);
+        button.addView(title, matchWrap());
 
-        languageValue = sectionLabel(0);
+        TextView summary = new TextView(this);
+        summary.setText(R.string.bridge_docs_summary);
+        summary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        summary.setLineSpacing(dp(1), 1f);
+        summary.setTextColor(Color.argb(220, 255, 255, 255));
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.topMargin = dp(4);
+        button.addView(summary, summaryParams);
+        return button;
+    }
+
+    private void openDocs() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.bridge_docs_url)));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Throwable ignored) {
+            Toast.makeText(this, R.string.bridge_docs_open_failed, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private LinearLayout createLanguageCard() {
+        LinearLayout card = createCard();
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setBackground(rippleSurface(dp(20)));
+        card.setOnClickListener(v -> showLanguagePicker());
+        card.setContentDescription(getString(R.string.bridge_language_change));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout textColumn = new LinearLayout(this);
+        textColumn.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(textColumn, textParams);
+
+        TextView title = sectionTitle(R.string.bridge_language_title);
+        textColumn.addView(title, matchWrap());
+
+        TextView summary = secondaryText(R.string.bridge_language_summary);
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.topMargin = dp(4);
+        textColumn.addView(summary, summaryParams);
+
+        languageValue = new TextView(this);
         languageValue.setText(labelForLanguageTag(BridgeLocalePrefs.read(this)));
-        languageValue.setTypeface(languageValue.getTypeface(), android.graphics.Typeface.NORMAL);
-        languageValue.setTextSize(15);
-        panel.addView(languageValue, topMargin(dp(12)));
+        languageValue.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        languageValue.setTextColor(color(R.color.bridge_accent));
+        languageValue.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        languageValue.setPadding(dp(12), dp(6), dp(12), dp(6));
+        languageValue.setBackground(chipBackground(color(R.color.bridge_accent_soft), dp(999)));
+        LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        valueParams.setMarginStart(dp(12));
+        row.addView(languageValue, valueParams);
 
-        Button changeButton = new Button(this);
-        changeButton.setText(R.string.bridge_language_change);
-        changeButton.setMinHeight(dp(48));
-        changeButton.setAllCaps(false);
-        changeButton.setOnClickListener(v -> showLanguagePicker());
-        panel.addView(changeButton, topMargin(dp(10)));
-        return panel;
+        TextView chevron = new TextView(this);
+        chevron.setText("›");
+        chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        chevron.setTextColor(color(R.color.bridge_text_tertiary));
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        chevronParams.setMarginStart(dp(4));
+        row.addView(chevron, chevronParams);
+
+        card.addView(row, matchWrap());
+        return card;
+    }
+
+    private LinearLayout createPreviewCard() {
+        LinearLayout card = createCard();
+        card.addView(sectionTitle(R.string.bridge_visual_preview_title), matchWrap());
+
+        LinearLayout stage = new LinearLayout(this);
+        stage.setOrientation(LinearLayout.VERTICAL);
+        stage.setPadding(dp(14), dp(14), dp(14), dp(16));
+        stage.setBackground(rounded(color(R.color.bridge_preview_stage), dp(16)));
+        LinearLayout.LayoutParams stageParams = matchWrap();
+        stageParams.topMargin = dp(14);
+        card.addView(stage, stageParams);
+
+        stage.addView(createChip(R.string.bridge_visual_preview_idle, false), matchWrap());
+        idlePreview = new BridgeWaveformPreviewView(this, false);
+        idlePreview.setVisualConfig(visualConfig);
+        LinearLayout.LayoutParams idleParams = matchWrap();
+        idleParams.topMargin = dp(8);
+        stage.addView(idlePreview, idleParams);
+
+        View divider = new View(this);
+        divider.setBackgroundColor(color(R.color.bridge_outline));
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            Math.max(1, dp(1))
+        );
+        dividerParams.topMargin = dp(14);
+        dividerParams.bottomMargin = dp(14);
+        stage.addView(divider, dividerParams);
+
+        stage.addView(createChip(R.string.bridge_visual_preview_recording, true), matchWrap());
+        recordingPreview = new BridgeWaveformPreviewView(this, true);
+        recordingPreview.setVisualConfig(visualConfig);
+        LinearLayout.LayoutParams recordingParams = matchWrap();
+        recordingParams.topMargin = dp(8);
+        stage.addView(recordingPreview, recordingParams);
+        return card;
+    }
+
+    private LinearLayout createSizeCard() {
+        LinearLayout card = createCard();
+
+        widthValue = valueBadge();
+        card.addView(createSliderHeader(R.string.bridge_visual_width_label, widthValue), matchWrap());
+        widthSeekBar = createSeekBar(
+            BridgeVisualPrefs.MAX_WIDTH_DP - BridgeVisualPrefs.MIN_WIDTH_DP,
+            visualConfig.widthDp - BridgeVisualPrefs.MIN_WIDTH_DP,
+            (progress) -> applyConfig(
+                new BridgeVisualPrefs.VisualConfig(
+                    BridgeVisualPrefs.MIN_WIDTH_DP + progress,
+                    visualConfig.heightDp
+                ),
+                true
+            )
+        );
+        LinearLayout.LayoutParams widthSeekParams = matchWrap();
+        widthSeekParams.topMargin = dp(4);
+        card.addView(widthSeekBar, widthSeekParams);
+
+        heightValue = valueBadge();
+        LinearLayout.LayoutParams heightHeaderParams = matchWrap();
+        heightHeaderParams.topMargin = dp(22);
+        card.addView(createSliderHeader(R.string.bridge_visual_height_label, heightValue), heightHeaderParams);
+        heightSeekBar = createSeekBar(
+            BridgeVisualPrefs.MAX_HEIGHT_DP - BridgeVisualPrefs.MIN_HEIGHT_DP,
+            visualConfig.heightDp - BridgeVisualPrefs.MIN_HEIGHT_DP,
+            (progress) -> applyConfig(
+                new BridgeVisualPrefs.VisualConfig(
+                    visualConfig.widthDp,
+                    BridgeVisualPrefs.MIN_HEIGHT_DP + progress
+                ),
+                true
+            )
+        );
+        LinearLayout.LayoutParams heightSeekParams = matchWrap();
+        heightSeekParams.topMargin = dp(4);
+        card.addView(heightSeekBar, heightSeekParams);
+
+        TextView hint = secondaryText(R.string.bridge_visual_height_hint);
+        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        LinearLayout.LayoutParams hintParams = matchWrap();
+        hintParams.topMargin = dp(8);
+        card.addView(hint, hintParams);
+
+        updateLabels();
+        return card;
+    }
+
+    private LinearLayout createSliderHeader(int labelRes, TextView valueView) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView label = sectionTitle(labelRes);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(label, labelParams);
+        row.addView(valueView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        return row;
+    }
+
+    private SeekBar createSeekBar(int max, int progress, ProgressConsumer consumer) {
+        SeekBar seekBar = new SeekBar(this);
+        seekBar.setMax(max);
+        seekBar.setProgress(progress);
+        seekBar.setPadding(dp(4), dp(12), dp(4), dp(12));
+        seekBar.setMinimumHeight(dp(40));
+        int accent = color(R.color.bridge_accent);
+        seekBar.setProgressTintList(ColorStateList.valueOf(accent));
+        seekBar.setThumbTintList(ColorStateList.valueOf(accent));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            seekBar.setMaxHeight(dp(4));
+        }
+        seekBar.setProgressBackgroundTintList(
+            ColorStateList.valueOf(color(R.color.bridge_outline))
+        );
+        seekBar.setOnSeekBarChangeListener(new SimpleSeekListener() {
+            @Override
+            public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
+                if (!fromUser) return;
+                consumer.onProgress(value);
+            }
+        });
+        return seekBar;
+    }
+
+    private Button createResetButton() {
+        Button button = new Button(this);
+        button.setText(R.string.bridge_visual_restore_defaults);
+        button.setAllCaps(false);
+        button.setMinHeight(dp(52));
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        button.setTextColor(color(R.color.bridge_accent));
+        button.setStateListAnimator(null);
+        button.setElevation(0f);
+        button.setBackground(outlinedButtonBackground());
+        button.setOnClickListener(v -> applyConfig(BridgeVisualPrefs.defaults(), true));
+        return button;
+    }
+
+    private TextView createChip(int labelRes, boolean recording) {
+        TextView chip = new TextView(this);
+        chip.setText(labelRes);
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        chip.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        chip.setPadding(dp(10), dp(4), dp(10), dp(4));
+        if (recording) {
+            chip.setTextColor(color(R.color.bridge_accent));
+            chip.setBackground(chipBackground(color(R.color.bridge_chip_recording_bg), dp(999)));
+        } else {
+            chip.setTextColor(color(R.color.bridge_text_secondary));
+            chip.setBackground(chipBackground(color(R.color.bridge_chip_idle_bg), dp(999)));
+        }
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        chip.setLayoutParams(params);
+        return chip;
+    }
+
+    private TextView valueBadge() {
+        TextView badge = new TextView(this);
+        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        badge.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        badge.setTextColor(color(R.color.bridge_text_primary));
+        badge.setPadding(dp(10), dp(4), dp(10), dp(4));
+        badge.setBackground(chipBackground(color(R.color.bridge_surface_muted), dp(999)));
+        return badge;
     }
 
     private void showLanguagePicker() {
@@ -142,75 +434,6 @@ public final class BridgeVisualSettingsActivity extends Activity {
         return getString(R.string.bridge_language_system);
     }
 
-    private LinearLayout createPreviewPanel() {
-        LinearLayout panel = createPanel();
-        TextView label = sectionLabel(R.string.bridge_visual_preview_title);
-        panel.addView(label, matchWrap());
-
-        TextView idleLabel = smallLabel(R.string.bridge_visual_preview_idle);
-        panel.addView(idleLabel, topMargin(dp(12)));
-        idlePreview = new BridgeWaveformPreviewView(this, false);
-        idlePreview.setVisualConfig(visualConfig);
-        panel.addView(idlePreview, matchWrap());
-
-        TextView recordingLabel = smallLabel(R.string.bridge_visual_preview_recording);
-        panel.addView(recordingLabel, topMargin(dp(8)));
-        recordingPreview = new BridgeWaveformPreviewView(this, true);
-        recordingPreview.setVisualConfig(visualConfig);
-        panel.addView(recordingPreview, matchWrap());
-        return panel;
-    }
-
-    private LinearLayout createSliderPanel() {
-        LinearLayout panel = createPanel();
-
-        widthLabel = sectionLabel(0);
-        panel.addView(widthLabel, matchWrap());
-        widthSeekBar = new SeekBar(this);
-        widthSeekBar.setMax(BridgeVisualPrefs.MAX_WIDTH_DP - BridgeVisualPrefs.MIN_WIDTH_DP);
-        widthSeekBar.setProgress(visualConfig.widthDp - BridgeVisualPrefs.MIN_WIDTH_DP);
-        widthSeekBar.setMinHeight(dp(48));
-        widthSeekBar.setOnSeekBarChangeListener(new SimpleSeekListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser) return;
-                applyConfig(
-                    new BridgeVisualPrefs.VisualConfig(
-                        BridgeVisualPrefs.MIN_WIDTH_DP + progress,
-                        visualConfig.heightDp
-                    ),
-                    true
-                );
-            }
-        });
-        panel.addView(widthSeekBar, topMargin(dp(8)));
-
-        heightLabel = sectionLabel(0);
-        LinearLayout.LayoutParams heightLabelParams = topMargin(dp(18));
-        panel.addView(heightLabel, heightLabelParams);
-        heightSeekBar = new SeekBar(this);
-        heightSeekBar.setMax(BridgeVisualPrefs.MAX_HEIGHT_DP - BridgeVisualPrefs.MIN_HEIGHT_DP);
-        heightSeekBar.setProgress(visualConfig.heightDp - BridgeVisualPrefs.MIN_HEIGHT_DP);
-        heightSeekBar.setMinHeight(dp(48));
-        heightSeekBar.setOnSeekBarChangeListener(new SimpleSeekListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser) return;
-                applyConfig(
-                    new BridgeVisualPrefs.VisualConfig(
-                        visualConfig.widthDp,
-                        BridgeVisualPrefs.MIN_HEIGHT_DP + progress
-                    ),
-                    true
-                );
-            }
-        });
-        panel.addView(heightSeekBar, topMargin(dp(8)));
-
-        updateLabels();
-        return panel;
-    }
-
     private void applyConfig(BridgeVisualPrefs.VisualConfig config, boolean save) {
         visualConfig = config;
         updateLabels();
@@ -226,56 +449,90 @@ public final class BridgeVisualSettingsActivity extends Activity {
     }
 
     private void updateLabels() {
-        if (widthLabel != null) {
-            widthLabel.setText(getString(R.string.bridge_visual_width_value, visualConfig.widthDp));
+        if (widthValue != null) {
+            widthValue.setText(getString(R.string.bridge_visual_dp_value, visualConfig.widthDp));
         }
-        if (heightLabel != null) {
-            heightLabel.setText(getString(R.string.bridge_visual_height_value, visualConfig.heightDp));
+        if (heightValue != null) {
+            heightValue.setText(getString(R.string.bridge_visual_dp_value, visualConfig.heightDp));
         }
     }
 
-    private LinearLayout createPanel() {
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(resolvePanelColor());
-        background.setCornerRadius(dp(12));
-        panel.setBackground(background);
-        return panel;
+    private LinearLayout createCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        card.setBackground(rounded(color(R.color.bridge_surface), dp(20)));
+        card.setElevation(dp(1));
+        return card;
     }
 
-    private TextView sectionLabel(int stringRes) {
-        TextView textView = new TextView(this);
-        if (stringRes != 0) textView.setText(stringRes);
-        textView.setTextSize(16);
-        textView.setTypeface(textView.getTypeface(), android.graphics.Typeface.BOLD);
-        textView.setTextColor(resolveTextColor(android.R.attr.textColorPrimary, Color.rgb(32, 32, 32)));
-        return textView;
-    }
-
-    private TextView smallLabel(int stringRes) {
+    private TextView sectionTitle(int stringRes) {
         TextView textView = new TextView(this);
         textView.setText(stringRes);
-        textView.setTextSize(13);
-        textView.setTextColor(resolveTextColor(android.R.attr.textColorSecondary, Color.rgb(96, 96, 96)));
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        textView.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        textView.setTextColor(color(R.color.bridge_text_primary));
         return textView;
     }
 
-    private int resolvePanelColor() {
-        return Color.argb(20, 128, 128, 128);
+    private TextView secondaryText(int stringRes) {
+        TextView textView = new TextView(this);
+        textView.setText(stringRes);
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        textView.setLineSpacing(dp(1), 1f);
+        textView.setTextColor(color(R.color.bridge_text_secondary));
+        return textView;
     }
 
-    private int resolveTextColor(int attr, int fallback) {
-        try {
-            android.util.TypedValue value = new android.util.TypedValue();
-            if (getTheme().resolveAttribute(attr, value, true)) {
-                if (value.resourceId != 0) return getColor(value.resourceId);
-                if (value.data != 0) return value.data;
-            }
-        } catch (Throwable ignored) {
-        }
-        return fallback;
+    private GradientDrawable rounded(int fillColor, int radiusPx) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(radiusPx);
+        drawable.setStroke(Math.max(1, dp(1)), color(R.color.bridge_outline));
+        return drawable;
+    }
+
+    private GradientDrawable chipBackground(int fillColor, int radiusPx) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(radiusPx);
+        return drawable;
+    }
+
+    private RippleDrawable rippleSurface(int radiusPx) {
+        GradientDrawable content = rounded(color(R.color.bridge_surface), radiusPx);
+        return new RippleDrawable(
+            ColorStateList.valueOf(color(R.color.bridge_ripple)),
+            content,
+            null
+        );
+    }
+
+    private RippleDrawable filledAccentRipple(int radiusPx) {
+        GradientDrawable content = new GradientDrawable();
+        content.setColor(color(R.color.bridge_accent));
+        content.setCornerRadius(radiusPx);
+        return new RippleDrawable(
+            ColorStateList.valueOf(Color.argb(60, 255, 255, 255)),
+            content,
+            null
+        );
+    }
+
+    private RippleDrawable outlinedButtonBackground() {
+        GradientDrawable content = new GradientDrawable();
+        content.setColor(Color.TRANSPARENT);
+        content.setCornerRadius(dp(16));
+        content.setStroke(Math.max(1, dp(1)), color(R.color.bridge_button_outline));
+        return new RippleDrawable(
+            ColorStateList.valueOf(color(R.color.bridge_ripple)),
+            content,
+            null
+        );
+    }
+
+    private int color(int resId) {
+        return getColor(resId);
     }
 
     private LinearLayout.LayoutParams matchWrap() {
@@ -293,6 +550,10 @@ public final class BridgeVisualSettingsActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private interface ProgressConsumer {
+        void onProgress(int progress);
     }
 
     private abstract static class SimpleSeekListener implements SeekBar.OnSeekBarChangeListener {

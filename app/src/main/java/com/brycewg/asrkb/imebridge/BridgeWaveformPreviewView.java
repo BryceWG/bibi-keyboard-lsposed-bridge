@@ -22,7 +22,8 @@ final class BridgeWaveformPreviewView extends View {
         this.recording = recording;
         this.waveformColor = BottomCaptureStripView.resolveWaveformColor(context);
         setBackgroundColor(Color.TRANSPARENT);
-        setMinimumHeight(dp(52));
+        setMinimumHeight(dp(56));
+        setPadding(0, dp(4), 0, dp(4));
     }
 
     void setVisualConfig(BridgeVisualPrefs.VisualConfig visualConfig) {

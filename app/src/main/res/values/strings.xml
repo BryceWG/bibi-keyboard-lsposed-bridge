@@ -1,16 +1,24 @@
 <resources>
     <string name="app_name">BiBi IME Bridge</string>
     <string name="xposed_description">Bridge BiBi floating ASR results and optional input-field context through the hooked input method via InputConnection.</string>
-    <string name="bridge_visual_title">Bridge visual settings</string>
+    <string name="bridge_visual_title">Bridge module settings</string>
     <string name="bridge_visual_summary">Adjust the bottom capture area used by hooked input methods. Changes are best-effort in LSPosed/LSPatch and fall back safely to defaults if the hook process cannot read them.</string>
     <string name="bridge_visual_preview_title">Preview</string>
     <string name="bridge_visual_preview_idle">Idle</string>
     <string name="bridge_visual_preview_recording">Recording</string>
     <string name="bridge_visual_width_value">Capture width: %1$d dp</string>
     <string name="bridge_visual_height_value">Capture height: %1$d dp (also lifts the strip from the bottom edge)</string>
+    <string name="bridge_visual_width_label">Width</string>
+    <string name="bridge_visual_height_label">Height</string>
+    <string name="bridge_visual_dp_value">%1$d dp</string>
+    <string name="bridge_visual_height_hint">Also lifts the strip from the bottom edge</string>
     <string name="bridge_visual_restore_defaults">Restore defaults</string>
+    <string name="bridge_docs_title">Setup guide &amp; docs</string>
+    <string name="bridge_docs_summary">Open the IME Bridge introduction, install steps, and troubleshooting guide</string>
+    <string name="bridge_docs_url">https://bibidocs.brycewg.com/en/advanced/ime-bridge.html</string>
+    <string name="bridge_docs_open_failed">Unable to open the documentation link</string>
     <string name="bridge_language_title">Language</string>
-    <string name="bridge_language_summary">Choose the language used by this settings screen. It does not affect hooked input methods.</string>
+    <string name="bridge_language_summary">Settings screen only. Does not affect hooked input methods.</string>
     <string name="bridge_language_change">Change language</string>
     <string name="bridge_language_system">Follow system</string>
     <string name="bridge_language_english">English</string>

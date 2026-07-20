@@ -5,7 +5,8 @@
         android:hasCode="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ImeBridge">
 
         <meta-data
             android:name="xposedmodule"
@@ -20,7 +21,8 @@
         <activity
             android:name=".BridgeVisualSettingsActivity"
             android:exported="true"
-            android:label="@string/bridge_visual_title">
+            android:label="@string/bridge_visual_title"
+            android:theme="@style/Theme.ImeBridge">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bridge_bg">#FF0F1115</color>
+    <color name="bridge_surface">#FF1A1D24</color>
+    <color name="bridge_surface_muted">#FF232833</color>
+    <color name="bridge_outline">#28FFFFFF</color>
+    <color name="bridge_text_primary">#FFF2F4F7</color>
+    <color name="bridge_text_secondary">#FFAEB4BE</color>
+    <color name="bridge_text_tertiary">#FF7E8694</color>
+    <color name="bridge_accent">#FF4CAF82</color>
+    <color name="bridge_accent_soft">#294CAF82</color>
+    <color name="bridge_chip_idle_bg">#24FFFFFF</color>
+    <color name="bridge_chip_recording_bg">#334CAF82</color>
+    <color name="bridge_preview_stage">#FF141820</color>
+    <color name="bridge_ripple">#334CAF82</color>
+    <color name="bridge_button_outline">#664CAF82</color>
+</resources>
