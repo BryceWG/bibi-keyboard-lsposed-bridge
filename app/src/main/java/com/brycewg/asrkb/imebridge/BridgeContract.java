@@ -7,7 +7,7 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.2.4";
+    static final String MODULE_VERSION = "0.2.5";
 
     static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
     static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
