@@ -7,7 +7,7 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.2.3";
+    static final String MODULE_VERSION = "0.2.4";
 
     static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
     static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
@@ -33,6 +33,16 @@ final class BridgeContract {
         "com.brycewg.asrkb.imebridge.action.QUERY_INPUT_CONTEXT";
     static final String ACTION_IME_WINDOW_VISIBILITY_CHANGED =
         "com.brycewg.asrkb.imebridge.action.IME_WINDOW_VISIBILITY_CHANGED";
+    static final String ACTION_SET_CLIPBOARD_TEXT =
+        "com.brycewg.asrkb.imebridge.action.SET_CLIPBOARD_TEXT";
+    static final String ACTION_GET_CLIPBOARD_TEXT =
+        "com.brycewg.asrkb.imebridge.action.GET_CLIPBOARD_TEXT";
+    static final String ACTION_START_CLIPBOARD_OBSERVE =
+        "com.brycewg.asrkb.imebridge.action.START_CLIPBOARD_OBSERVE";
+    static final String ACTION_STOP_CLIPBOARD_OBSERVE =
+        "com.brycewg.asrkb.imebridge.action.STOP_CLIPBOARD_OBSERVE";
+    static final String ACTION_CLIPBOARD_TEXT_CHANGED =
+        "com.brycewg.asrkb.imebridge.action.CLIPBOARD_TEXT_CHANGED";
     static final String PCM_ACTION_BIND_SERVICE =
         "com.brycewg.asrkb.imebridge.action.BIND_PCM_SESSION_SERVICE";
     static final String PCM_DESCRIPTOR =
@@ -57,6 +67,10 @@ final class BridgeContract {
     static final String EXTRA_SUPPORTS_SESSIONS = "supports_sessions";
     static final String EXTRA_SUPPORTS_PCM_RECORDING = "supports_pcm_recording";
     static final String EXTRA_SUPPORTS_INPUT_CONTEXT = "supports_input_context";
+    static final String EXTRA_SUPPORTS_CLIPBOARD = "supports_clipboard";
+    static final String EXTRA_IS_CLIPBOARD_SENSITIVE = "is_clipboard_sensitive";
+    static final String EXTRA_CLIPBOARD_TEXT_CHARS = "clipboard_text_chars";
+    static final String EXTRA_CLIPBOARD_SUBSCRIPTION_TOKEN = "clipboard_subscription_token";
     static final String EXTRA_ACTIVE_SESSION_ID = "active_session_id";
     static final String EXTRA_LAST_OPERATION = "last_operation";
     static final String EXTRA_LAST_RESULT_CODE = "last_result_code";
@@ -73,6 +87,7 @@ final class BridgeContract {
     static final int RESULT_BAD_REQUEST = -7;
     static final int RESULT_COMPOSING_FAILED = -8;
     static final int RESULT_SESSION_MISMATCH = -9;
+    static final int RESULT_CLIPBOARD_FAILED = -10;
 
     static final int PCM_TRANSACTION_BEGIN = android.os.IBinder.FIRST_CALL_TRANSACTION + 0;
     static final int PCM_TRANSACTION_WRITE_FRAME = android.os.IBinder.FIRST_CALL_TRANSACTION + 1;

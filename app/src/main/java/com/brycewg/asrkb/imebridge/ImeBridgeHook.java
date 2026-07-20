@@ -6,12 +6,16 @@
 package com.brycewg.asrkb.imebridge;
 
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipDescription;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.inputmethodservice.InputMethodService;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.text.InputType;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -33,10 +37,14 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final HookInstallGate HOOK_INSTALL_GATE = new HookInstallGate();
     private static final Map<InputMethodService, List<BridgeReceiver>> RECEIVERS = new WeakHashMap<>();
     private static final Map<InputMethodService, CaptureRuntime> CAPTURE_RUNTIMES = new WeakHashMap<>();
+    private static final ClipboardObserveRegistry CLIPBOARD_OBSERVERS = new ClipboardObserveRegistry();
 
     private static WeakReference<InputMethodService> activeServiceRef = new WeakReference<>(null);
     private static EditorInfo activeEditorInfo;
     private static boolean imeWindowVisible;
+    private static boolean clipboardListenerRegistered;
+    private static boolean suppressOwnClipboardChange;
+    private static ClipboardManager.OnPrimaryClipChangedListener clipboardChangeListener;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -67,7 +75,9 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             protected void afterHookedMethod(MethodHookParam param) {
                 InputMethodService service = asImeService(param.thisObject);
                 if (service == null) return;
+                activeServiceRef = new WeakReference<>(service);
                 registerBridgeReceiver(service, resolveHostPackage(service));
+                ensureClipboardObserver(service);
             }
         });
 
@@ -255,6 +265,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         filter.addAction(BridgeContract.ACTION_SET_COMPOSING_TEXT);
         filter.addAction(BridgeContract.ACTION_FINISH_COMPOSING_TEXT);
         filter.addAction(BridgeContract.ACTION_QUERY_INPUT_CONTEXT);
+        filter.addAction(BridgeContract.ACTION_SET_CLIPBOARD_TEXT);
+        filter.addAction(BridgeContract.ACTION_GET_CLIPBOARD_TEXT);
+        filter.addAction(BridgeContract.ACTION_START_CLIPBOARD_OBSERVE);
+        filter.addAction(BridgeContract.ACTION_STOP_CLIPBOARD_OBSERVE);
         return filter;
     }
 
@@ -287,6 +301,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + ": failed to unregister receiver: " + t);
             }
         }
+        detachClipboardObserver(service);
     }
 
     private static synchronized void resetBridgeReceiverPreview(InputMethodService service) {
@@ -310,6 +325,148 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 context.sendBroadcast(intent, BridgeContract.permissionForAppPackage(appPackageName));
             } catch (Throwable t) {
                 XposedBridge.log(TAG + ": failed to send IME visibility to " + appPackageName + ": " + t);
+            }
+        }
+    }
+
+    private static ClipboardManager clipboardManager(Context context) {
+        if (context == null) return null;
+        try {
+            return (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": clipboard manager unavailable: " + t);
+            return null;
+        }
+    }
+
+    private static boolean writeClipboardText(Context context, CharSequence value) {
+        ClipboardManager clipboard = clipboardManager(context);
+        if (clipboard == null || value == null || value.length() == 0) return false;
+        suppressOwnClipboardChange = true;
+        try {
+            clipboard.setPrimaryClip(ClipData.newPlainText("SyncClipboard", value));
+            return true;
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": setPrimaryClip failed: " + t);
+            suppressOwnClipboardChange = false;
+            return false;
+        } finally {
+            suppressOwnClipboardChange = false;
+        }
+    }
+
+    private static String readClipboardText(Context context) {
+        ClipboardManager clipboard = clipboardManager(context);
+        if (clipboard == null) return null;
+        ClipData clip;
+        try {
+            clip = clipboard.getPrimaryClip();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": getPrimaryClip failed: " + t);
+            return null;
+        }
+        if (clip == null || clip.getItemCount() <= 0) return null;
+        try {
+            CharSequence text = clip.getItemAt(0).getText();
+            if (text == null || text.length() == 0) return null;
+            return text.toString();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": read clipboard text failed: " + t);
+            return null;
+        }
+    }
+
+    private static boolean isClipboardSensitive(Context context) {
+        ClipboardManager clipboard = clipboardManager(context);
+        if (clipboard == null) return false;
+        ClipData clip;
+        try {
+            clip = clipboard.getPrimaryClip();
+        } catch (Throwable t) {
+            return false;
+        }
+        if (clip == null) return false;
+        ClipDescription description = clip.getDescription();
+        if (description == null) return false;
+        try {
+            PersistableBundle extras = description.getExtras();
+            if (extras == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                return extras.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false);
+            }
+            return extras.getBoolean("android.content.extra.IS_SENSITIVE", false);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static synchronized void ensureClipboardObserver(Context context) {
+        if (!CLIPBOARD_OBSERVERS.hasSubscribers()) return;
+        if (clipboardListenerRegistered) return;
+        ClipboardManager clipboard = clipboardManager(context);
+        if (clipboard == null) return;
+        if (clipboardChangeListener == null) {
+            clipboardChangeListener = () -> {
+                if (suppressOwnClipboardChange) {
+                    suppressOwnClipboardChange = false;
+                    return;
+                }
+                if (!CLIPBOARD_OBSERVERS.hasSubscribers()) return;
+                InputMethodService service = activeServiceRef.get();
+                Context ctx = service != null ? service : context;
+                String text = readClipboardText(ctx);
+                if (text == null || text.length() == 0) return;
+                boolean sensitive = isClipboardSensitive(ctx);
+                String imePackage = service != null ? service.getPackageName() : null;
+                sendClipboardTextChanged(ctx, imePackage, text, sensitive);
+            };
+        }
+        try {
+            clipboard.addPrimaryClipChangedListener(clipboardChangeListener);
+            clipboardListenerRegistered = true;
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": addPrimaryClipChangedListener failed: " + t);
+        }
+    }
+
+    private static synchronized void detachClipboardObserver(Context context) {
+        if (!clipboardListenerRegistered) return;
+        ClipboardManager clipboard = clipboardManager(context);
+        if (clipboard != null && clipboardChangeListener != null) {
+            try {
+                clipboard.removePrimaryClipChangedListener(clipboardChangeListener);
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": removePrimaryClipChangedListener failed: " + t);
+            }
+        }
+        clipboardListenerRegistered = false;
+    }
+
+    private static void sendClipboardTextChanged(
+        Context context,
+        String imePackageName,
+        String text,
+        boolean sensitive
+    ) {
+        if (context == null || text == null) return;
+        for (ClipboardObserveRegistry.Subscription subscription : CLIPBOARD_OBSERVERS.snapshot()) {
+            String appPackageName = subscription.appPackageName;
+            try {
+                Intent intent = new Intent(BridgeContract.ACTION_CLIPBOARD_TEXT_CHANGED);
+                intent.setPackage(appPackageName);
+                intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
+                intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, imePackageName);
+                if (!sensitive) intent.putExtra(BridgeContract.EXTRA_TEXT, text);
+                intent.putExtra(BridgeContract.EXTRA_CLIPBOARD_TEXT_CHARS, text.length());
+                intent.putExtra(BridgeContract.EXTRA_IS_CLIPBOARD_SENSITIVE, sensitive);
+                intent.putExtra(
+                    BridgeContract.EXTRA_CLIPBOARD_SUBSCRIPTION_TOKEN,
+                    subscription.token
+                );
+                context.sendBroadcast(intent, BridgeContract.permissionForAppPackage(appPackageName));
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to send clipboard change to " + appPackageName + ": " + t);
             }
         }
     }
@@ -517,9 +674,88 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 handleFinishComposingText(intent);
             } else if (BridgeContract.ACTION_QUERY_INPUT_CONTEXT.equals(action)) {
                 handleQueryInputContext(intent);
+            } else if (BridgeContract.ACTION_SET_CLIPBOARD_TEXT.equals(action)) {
+                handleSetClipboardText(intent);
+            } else if (BridgeContract.ACTION_GET_CLIPBOARD_TEXT.equals(action)) {
+                handleGetClipboardText();
+            } else if (BridgeContract.ACTION_START_CLIPBOARD_OBSERVE.equals(action)) {
+                handleStartClipboardObserve(intent);
+            } else if (BridgeContract.ACTION_STOP_CLIPBOARD_OBSERVE.equals(action)) {
+                handleStopClipboardObserve();
             } else {
                 finish(BridgeContract.RESULT_BAD_REQUEST, "unknown action");
             }
+        }
+
+        private void handleSetClipboardText(Intent intent) {
+            CharSequence value = intent.getCharSequenceExtra(BridgeContract.EXTRA_TEXT);
+            if (value == null || value.length() == 0) {
+                finish(BridgeContract.RESULT_BAD_REQUEST, "empty text");
+                return;
+            }
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+            boolean ok = writeClipboardText(service, value);
+            finish(
+                ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_CLIPBOARD_FAILED,
+                ok ? "ok" : "clipboard write failed"
+            );
+        }
+
+        private void handleGetClipboardText() {
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+            String text = readClipboardText(service);
+            if (text == null || text.length() == 0) {
+                finish(BridgeContract.RESULT_CLIPBOARD_FAILED, "empty clipboard");
+                return;
+            }
+            Bundle extras = getResultExtras(true);
+            extras.putString(BridgeContract.EXTRA_TEXT, text);
+            extras.putInt(BridgeContract.EXTRA_CLIPBOARD_TEXT_CHARS, text.length());
+            extras.putBoolean(
+                BridgeContract.EXTRA_IS_CLIPBOARD_SENSITIVE,
+                isClipboardSensitive(service)
+            );
+            setResultExtras(extras);
+            finish(BridgeContract.RESULT_OK, "ok");
+        }
+
+        private void handleStartClipboardObserve(Intent intent) {
+            InputMethodService service = activeServiceRef.get();
+            if (service == null) {
+                finish(BridgeContract.RESULT_NO_ACTIVE_IME, "no active ime");
+                return;
+            }
+            String appPackageName = BridgeContract.ownerPackageForPermission(permission);
+            String token = intent.getStringExtra(BridgeContract.EXTRA_CLIPBOARD_SUBSCRIPTION_TOKEN);
+            if (!CLIPBOARD_OBSERVERS.subscribe(appPackageName, token)) {
+                finish(BridgeContract.RESULT_BAD_REQUEST, "invalid clipboard subscription");
+                return;
+            }
+            ensureClipboardObserver(service);
+            finish(
+                clipboardListenerRegistered
+                    ? BridgeContract.RESULT_OK
+                    : BridgeContract.RESULT_CLIPBOARD_FAILED,
+                clipboardListenerRegistered ? "observing" : "observe failed"
+            );
+        }
+
+        private void handleStopClipboardObserve() {
+            String appPackageName = BridgeContract.ownerPackageForPermission(permission);
+            CLIPBOARD_OBSERVERS.unsubscribe(appPackageName);
+            InputMethodService service = activeServiceRef.get();
+            if (!CLIPBOARD_OBSERVERS.hasSubscribers()) {
+                detachClipboardObserver(service);
+            }
+            finish(BridgeContract.RESULT_OK, "stopped");
         }
 
         private void handleQueryStatus() {
@@ -868,6 +1104,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 captureRuntime != null && captureRuntime.supportsPcmRecording()
             );
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_INPUT_CONTEXT, true);
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_CLIPBOARD, true);
             if (activeSessionId != null) {
                 extras.putString(BridgeContract.EXTRA_ACTIVE_SESSION_ID, activeSessionId);
             }
