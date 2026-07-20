@@ -14,4 +14,5 @@
     <color name="bridge_preview_stage">#FFF7F9FB</color>
     <color name="bridge_ripple">#1F1B7F5A</color>
     <color name="bridge_button_outline">#331B7F5A</color>
+    <color name="ic_launcher_background_color">#F8F9FB</color>
 </resources>

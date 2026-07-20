@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BiBi IME Bridge logo</title>
+  <desc id="desc">The BiBi monogram with a blue link badge.</desc>
+  <defs>
+    <linearGradient id="bridge" x1="285" y1="285" x2="415" y2="415" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6E7BFF"/>
+      <stop offset="1" stop-color="#4766E8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#F8F9FB"/>
+  <g transform="translate(68 62) scale(.68)">
+    <path d="M311.12 109C372.49 109 415.88 168.45 397.23 226.31L396.78 227.68 380.81 274.73 446 390H249.89C262.04 377.17 271.58 361.68 277.5 344.23L281.03 333.8H349.39L319.23 280.47 343.24 209.7C350.66 187.85 334.32 165.2 311.12 165.2H215.23C191.1 165.2 169.64 180.44 161.79 203.13L130.18 294.6C123.55 313.8 137.89 333.8 158.31 333.8C171.07 333.8 182.41 325.7 186.49 313.68L208.26 249.49C192.73 249.41 180.17 236.87 180.17 221.4C180.17 205.88 192.82 193.3 208.42 193.3H286.81C302.42 193.3 315.06 205.88 315.06 221.4C315.06 236.92 302.42 249.5 286.81 249.5H267.9L240.02 331.65C228.19 366.52 195.31 390 158.31 390C99.11 390 57.51 332.02 76.75 276.33L108.36 184.86C124.05 139.48 166.98 109 215.23 109H311.12Z" fill="#68717D"/>
+  </g>
+  <circle cx="354" cy="354" r="86" fill="#F8F9FB"/>
+  <circle cx="354" cy="354" r="74" fill="url(#bridge)"/>
+  <g transform="translate(294 294) scale(5)" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 13A5 5 0 0 0 17.54 13.54L20.54 10.54A5 5 0 0 0 13.47 3.47L11.75 5.18"/>
+    <path d="M14 11A5 5 0 0 0 6.46 10.46L3.46 13.46A5 5 0 0 0 10.53 20.53L12.24 18.82"/>
+  </g>
+</svg>
+

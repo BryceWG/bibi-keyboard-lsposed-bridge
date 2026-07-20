@@ -1,12 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon foreground. Scaled ~82% about center so launcher masks
+  leave comfortable inset (full-bleed artwork looked oversized on home screens).
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M30,32h48c5.52,0 10,4.48 10,10v24c0,5.52 -4.48,10 -10,10H30c-5.52,0 -10,-4.48 -10,-10V42c0,-5.52 4.48,-10 10,-10z" />
-    <path
-        android:fillColor="#FF0B57D0"
-        android:pathData="M34,43h40v6H34zM34,54h28v6H34zM34,65h20v6H34zM66,61l10,6 -10,6z" />
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+
+        <group
+            android:translateX="68"
+            android:translateY="62"
+            android:scaleX="0.68"
+            android:scaleY="0.68">
+            <path
+                android:fillColor="#68717D"
+                android:pathData="M311.12,109C372.49,109 415.88,168.45 397.23,226.31L396.78,227.68 380.81,274.73 446,390H249.89C262.04,377.17 271.58,361.68 277.5,344.23L281.03,333.8H349.39L319.23,280.47 343.24,209.7C350.66,187.85 334.32,165.2 311.12,165.2H215.23C191.1,165.2 169.64,180.44 161.79,203.13L130.18,294.6C123.55,313.8 137.89,333.8 158.31,333.8C171.07,333.8 182.41,325.7 186.49,313.68L208.26,249.49C192.73,249.41 180.17,236.87 180.17,221.4C180.17,205.88 192.82,193.3 208.42,193.3H286.81C302.42,193.3 315.06,205.88 315.06,221.4C315.06,236.92 302.42,249.5 286.81,249.5H267.9L240.02,331.65C228.19,366.52 195.31,390 158.31,390C99.11,390 57.51,332.02 76.75,276.33L108.36,184.86C124.05,139.48 166.98,109 215.23,109H311.12Z" />
+        </group>
+
+        <path
+            android:fillColor="#F8F9FB"
+            android:pathData="M354,268A86,86 0,1 0,354 440A86,86 0,1 0,354 268" />
+        <path
+            android:fillColor="#5868F5"
+            android:pathData="M354,280A74,74 0,1 0,354 428A74,74 0,1 0,354 280" />
+
+        <group
+            android:translateX="294"
+            android:translateY="294"
+            android:scaleX="5"
+            android:scaleY="5">
+            <path
+                android:fillColor="@android:color/transparent"
+                android:strokeColor="#FFFFFF"
+                android:strokeWidth="2.5"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:pathData="M10,13A5,5 0,0 0,17.54 13.54L20.54,10.54A5,5 0,0 0,13.47 3.47L11.75,5.18" />
+            <path
+                android:fillColor="@android:color/transparent"
+                android:strokeColor="#FFFFFF"
+                android:strokeWidth="2.5"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:pathData="M14,11A5,5 0,0 0,6.46 10.46L3.46,13.46A5,5 0,0 0,10.53 20.53L12.24,18.82" />
+        </group>
+    </group>
 </vector>
