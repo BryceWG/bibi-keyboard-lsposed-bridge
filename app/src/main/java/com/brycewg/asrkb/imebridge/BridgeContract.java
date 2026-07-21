@@ -47,6 +47,10 @@ final class BridgeContract {
         "com.brycewg.asrkb.imebridge.action.BIND_PCM_SESSION_SERVICE";
     static final String PCM_DESCRIPTOR =
         "com.brycewg.asrkb.imebridge.ImeBridgePcmSessionService";
+    static final String CLIPBOARD_SYNC_ACTION_BIND_SERVICE =
+        "com.brycewg.asrkb.imebridge.action.BIND_CLIPBOARD_SYNC_RUNTIME";
+    static final String CLIPBOARD_SYNC_DESCRIPTOR =
+        "com.brycewg.asrkb.imebridge.ImeBridgeClipboardSyncService";
 
     static final String EXTRA_PROTOCOL_VERSION = "protocol_version";
     static final String EXTRA_REQUEST_ID = "request_id";
@@ -93,6 +97,13 @@ final class BridgeContract {
     static final int PCM_TRANSACTION_WRITE_FRAME = android.os.IBinder.FIRST_CALL_TRANSACTION + 1;
     static final int PCM_TRANSACTION_FINISH = android.os.IBinder.FIRST_CALL_TRANSACTION + 2;
     static final int PCM_TRANSACTION_CANCEL = android.os.IBinder.FIRST_CALL_TRANSACTION + 3;
+
+    static final int CLIPBOARD_SYNC_TRANSACTION_ACTIVATE =
+        android.os.IBinder.FIRST_CALL_TRANSACTION + 0;
+    static final int CLIPBOARD_SYNC_TRANSACTION_DEACTIVATE =
+        android.os.IBinder.FIRST_CALL_TRANSACTION + 1;
+    static final int CLIPBOARD_SYNC_TRANSACTION_WINDOW_HIDDEN =
+        android.os.IBinder.FIRST_CALL_TRANSACTION + 2;
 
     static final int PCM_RESULT_OK = 1;
     static final int PCM_RESULT_FEATURE_DISABLED = -1;

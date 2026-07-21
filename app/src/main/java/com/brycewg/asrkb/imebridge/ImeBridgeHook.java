@@ -38,6 +38,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final Map<InputMethodService, List<BridgeReceiver>> RECEIVERS = new WeakHashMap<>();
     private static final Map<InputMethodService, CaptureRuntime> CAPTURE_RUNTIMES = new WeakHashMap<>();
     private static final ClipboardObserveRegistry CLIPBOARD_OBSERVERS = new ClipboardObserveRegistry();
+    private static final Map<InputMethodService, BridgeClipboardSyncDispatcher> CLIPBOARD_SYNC_DISPATCHERS =
+        new WeakHashMap<>();
 
     private static WeakReference<InputMethodService> activeServiceRef = new WeakReference<>(null);
     private static EditorInfo activeEditorInfo;
@@ -130,6 +132,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 registerBridgeReceiver(service, hostPackage);
                 attachCaptureRuntime(service, hostPackage);
                 sendImeWindowVisibility(service, hostPackage, true);
+                showClipboardSyncRuntime(service);
             }
         });
 
@@ -143,6 +146,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 }
                 detachCaptureRuntime(service, "window hidden");
                 sendImeWindowVisibility(service, resolveHostPackage(service), false);
+                hideClipboardSyncRuntime(service);
             }
         });
 
@@ -153,6 +157,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 if (service == null) return;
                 resetBridgeReceiverPreview(service);
                 destroyCaptureRuntime(service);
+                deactivateClipboardSyncRuntime(service);
                 unregisterBridgeReceiver(service);
                 if (service == activeServiceRef.get()) {
                     activeServiceRef = new WeakReference<>(null);
@@ -175,6 +180,51 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + ": resolve host package from service failed: " + t);
         }
         return HOOK_INSTALL_GATE.resolveHostPackage(servicePackage);
+    }
+
+    private static synchronized void showClipboardSyncRuntime(InputMethodService service) {
+        if (service == null) return;
+        String targetImePackage = null;
+        try {
+            targetImePackage = service.getPackageName();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": resolve target ime package failed: " + t);
+        }
+        if (targetImePackage == null || targetImePackage.length() == 0) return;
+        try {
+            BridgeClipboardSyncDispatcher dispatcher = CLIPBOARD_SYNC_DISPATCHERS.get(service);
+            if (dispatcher == null) {
+                dispatcher = new BridgeClipboardSyncDispatcher(new BridgeClipboardSyncClient(service));
+                CLIPBOARD_SYNC_DISPATCHERS.put(service, dispatcher);
+            }
+            // 目标包名是被 Hook 的第三方 IME；宿主 Pro/OSS 由 client 自行优先选择。
+            // 不传 SyncClipboard 服务器地址或凭证。
+            dispatcher.windowShown(targetImePackage);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": clipboard sync runtime show error: " + t);
+        }
+    }
+
+    private static synchronized void hideClipboardSyncRuntime(InputMethodService service) {
+        if (service == null) return;
+        BridgeClipboardSyncDispatcher dispatcher = CLIPBOARD_SYNC_DISPATCHERS.get(service);
+        if (dispatcher == null) return;
+        try {
+            dispatcher.windowHidden();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": clipboard sync window hidden notify error: " + t);
+        }
+    }
+
+    private static synchronized void deactivateClipboardSyncRuntime(InputMethodService service) {
+        if (service == null) return;
+        BridgeClipboardSyncDispatcher dispatcher = CLIPBOARD_SYNC_DISPATCHERS.remove(service);
+        if (dispatcher == null) return;
+        try {
+            dispatcher.destroy();
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": clipboard sync runtime deactivate error: " + t);
+        }
     }
 
     private static synchronized void registerBridgeReceiver(InputMethodService service, String packageName) {
