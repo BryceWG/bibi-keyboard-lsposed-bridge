@@ -150,6 +150,9 @@ final class ImeWindowCaptureHost {
         float density
     ) {
         if (strip == null || root == null || visualConfig == null) return;
+        strip.setShowWaveformOnlyWhileRecording(
+            visualConfig.showWaveformOnlyWhileRecording
+        );
         FrameLayout.LayoutParams params = buildLayoutParams(root, visualConfig, density);
         lastStripHeightPx = params.height;
         ViewGroup.LayoutParams existing = strip.getLayoutParams();

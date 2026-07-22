@@ -32,8 +32,17 @@ final class WaveformState {
     }
 
     static WaveformState fromStatus(BridgeCaptureStatus status) {
+        return fromStatus(status, false);
+    }
+
+    static WaveformState fromStatus(
+        BridgeCaptureStatus status,
+        boolean showOnlyWhileRecording
+    ) {
         if (status == null || status.state != BridgeCaptureStatus.State.RECORDING) {
-            return idle();
+            return showOnlyWhileRecording
+                ? new WaveformState(false, false, IDLE_TARGET_VOLUME, 0)
+                : idle();
         }
         return new WaveformState(
             true,

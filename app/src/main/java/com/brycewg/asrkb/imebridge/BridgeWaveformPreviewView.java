@@ -56,7 +56,10 @@ final class BridgeWaveformPreviewView extends View {
         long timeMs = SystemClock.uptimeMillis();
         WaveformState state = recording
             ? WaveformState.fromStatus(BridgeCaptureStatus.recording(previewAmplitude(timeMs)))
-            : WaveformState.idle();
+            : WaveformState.fromStatus(
+                BridgeCaptureStatus.ready("preview"),
+                visualConfig.showWaveformOnlyWhileRecording
+            );
         waveformPainter.draw(
             canvas,
             stripWidth,

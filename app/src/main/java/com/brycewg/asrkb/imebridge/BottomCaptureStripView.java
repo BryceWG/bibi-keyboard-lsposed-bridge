@@ -43,6 +43,8 @@ final class BottomCaptureStripView extends View {
     };
 
     private WaveformState waveformState = WaveformState.idle();
+    private BridgeCaptureStatus captureStatus = BridgeCaptureStatus.ready("attached");
+    private boolean showWaveformOnlyWhileRecording;
 
     BottomCaptureStripView(Context context, Listener listener) {
         super(context);
@@ -77,7 +79,20 @@ final class BottomCaptureStripView extends View {
     }
 
     void updateStatus(BridgeCaptureStatus status) {
-        WaveformState next = WaveformState.fromStatus(status);
+        captureStatus = status;
+        applyWaveformState();
+    }
+
+    void setShowWaveformOnlyWhileRecording(boolean enabled) {
+        showWaveformOnlyWhileRecording = enabled;
+        applyWaveformState();
+    }
+
+    private void applyWaveformState() {
+        WaveformState next = WaveformState.fromStatus(
+            captureStatus,
+            showWaveformOnlyWhileRecording
+        );
         if (waveformState != null && waveformState.animated && !next.animated) {
             waveformPainter.resetAnimationState();
         }

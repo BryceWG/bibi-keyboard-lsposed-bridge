@@ -36,4 +36,8 @@
     <string name="bridge_show_recording_area_summary">在被 Hook 的輸入法底部注入波形與長按錄音區域。</string>
     <string name="feature_bridge_show_recording_area_off_desc">不再注入波形與長按錄音區域；文字插入、視窗可見性與剪貼簿橋接仍可用。</string>
     <string name="feature_bridge_show_recording_area_on_desc">在被 Hook 的輸入法底部顯示波形與長按錄音區域。變更最多在下一次輸入法視窗顯示時生效。</string>
+    <string name="bridge_recording_only_waveform_title">僅錄音時顯示波形</string>
+    <string name="bridge_recording_only_waveform_summary">隱藏閒置波形，但保留長按錄音區域。</string>
+    <string name="feature_bridge_recording_only_waveform_off_desc">閒置和錄音時均顯示波形。</string>
+    <string name="feature_bridge_recording_only_waveform_on_desc">閒置時隱藏波形，長按錄音區域仍可用，錄音時顯示動態波形。變更最多在下一次輸入法視窗顯示時生效。</string>
 </resources>

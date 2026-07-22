@@ -36,4 +36,8 @@
     <string name="bridge_show_recording_area_summary">Inject the waveform and long-press capture strip into hooked keyboards.</string>
     <string name="feature_bridge_show_recording_area_off_desc">Stops injecting the waveform and long-press recording area. Text insertion, IME visibility, and clipboard bridging stay available.</string>
     <string name="feature_bridge_show_recording_area_on_desc">Shows the waveform and long-press recording area at the bottom of hooked keyboards. Changes apply the next time the keyboard window is shown.</string>
+    <string name="bridge_recording_only_waveform_title">Show waveform only while recording</string>
+    <string name="bridge_recording_only_waveform_summary">Hide the idle waveform without disabling the long-press recording area.</string>
+    <string name="feature_bridge_recording_only_waveform_off_desc">Keeps the waveform visible while idle and recording.</string>
+    <string name="feature_bridge_recording_only_waveform_on_desc">Hides the waveform while idle. The long-press area stays active, and the waveform appears during recording. Changes apply the next time the keyboard window is shown.</string>
 </resources>

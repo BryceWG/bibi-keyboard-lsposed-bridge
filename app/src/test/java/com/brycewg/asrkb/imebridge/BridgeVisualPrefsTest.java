@@ -28,6 +28,7 @@ public class BridgeVisualPrefsTest {
         BridgeVisualPrefs.VisualConfig defaults = BridgeVisualPrefs.defaults();
         assertEquals(BridgeContract.HOST_TARGET_AUTO, defaults.hostTarget);
         assertTrue(defaults.showRecordingArea);
+        assertFalse(defaults.showWaveformOnlyWhileRecording);
     }
 
     @Test
@@ -44,14 +45,32 @@ public class BridgeVisualPrefsTest {
             160,
             40,
             BridgeContract.HOST_TARGET_PRO,
-            false
+            false,
+            true
         );
         assertEquals(BridgeContract.HOST_TARGET_PRO, base.withSize(200, 48).hostTarget);
         assertFalse(base.withSize(200, 48).showRecordingArea);
+        assertTrue(base.withSize(200, 48).showWaveformOnlyWhileRecording);
         assertTrue(base.withShowRecordingArea(true).showRecordingArea);
+        assertTrue(base.withShowRecordingArea(true).showWaveformOnlyWhileRecording);
+        assertTrue(base.withHostTarget(BridgeContract.HOST_TARGET_AUTO)
+            .showWaveformOnlyWhileRecording);
+        assertFalse(base.withShowWaveformOnlyWhileRecording(false).showRecordingArea);
         assertEquals(
             BridgeContract.HOST_TARGET_OPEN_SOURCE,
             base.withHostTarget(BridgeContract.HOST_TARGET_OPEN_SOURCE).hostTarget
         );
+    }
+
+    @Test
+    public void recordingOnlyModeHidesIdleButShowsRecordingWaveform() {
+        assertFalse(WaveformState.fromStatus(
+            BridgeCaptureStatus.ready("attached"),
+            true
+        ).visible);
+        assertTrue(WaveformState.fromStatus(
+            BridgeCaptureStatus.recording(1000),
+            true
+        ).visible);
     }
 }

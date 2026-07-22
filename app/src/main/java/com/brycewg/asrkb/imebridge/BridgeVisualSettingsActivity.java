@@ -37,12 +37,14 @@ public final class BridgeVisualSettingsActivity extends Activity {
     private TextView languageValue;
     private TextView hostTargetValue;
     private Switch showRecordingAreaSwitch;
+    private Switch recordingOnlyWaveformSwitch;
     private BridgeWaveformPreviewView idlePreview;
     private BridgeWaveformPreviewView recordingPreview;
     private SeekBar widthSeekBar;
     private SeekBar heightSeekBar;
     private boolean explainedHostTarget;
     private boolean explainedShowRecordingArea;
+    private boolean explainedRecordingOnlyWaveform;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -73,6 +75,7 @@ public final class BridgeVisualSettingsActivity extends Activity {
         content.addView(createLanguageCard(), topMargin(dp(14)));
         content.addView(createHostTargetCard(), topMargin(dp(14)));
         content.addView(createShowRecordingAreaCard(), topMargin(dp(14)));
+        content.addView(createRecordingOnlyWaveformCard(), topMargin(dp(14)));
         content.addView(createPreviewCard(), topMargin(dp(14)));
         content.addView(createSizeCard(), topMargin(dp(14)));
         content.addView(createResetButton(), topMargin(dp(20)));
@@ -320,6 +323,41 @@ public final class BridgeVisualSettingsActivity extends Activity {
         return card;
     }
 
+    private LinearLayout createRecordingOnlyWaveformCard() {
+        LinearLayout card = createCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout textColumn = new LinearLayout(this);
+        textColumn.setOrientation(LinearLayout.VERTICAL);
+        row.addView(textColumn, new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        ));
+        textColumn.addView(sectionTitle(R.string.bridge_recording_only_waveform_title), matchWrap());
+        TextView summary = secondaryText(R.string.bridge_recording_only_waveform_summary);
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.topMargin = dp(4);
+        textColumn.addView(summary, summaryParams);
+
+        recordingOnlyWaveformSwitch = new Switch(this);
+        recordingOnlyWaveformSwitch.setChecked(visualConfig.showWaveformOnlyWhileRecording);
+        recordingOnlyWaveformSwitch.setOnCheckedChangeListener(
+            this::onRecordingOnlyWaveformChanged
+        );
+        LinearLayout.LayoutParams switchParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        switchParams.setMarginStart(dp(12));
+        row.addView(recordingOnlyWaveformSwitch, switchParams);
+
+        card.addView(row, matchWrap());
+        return card;
+    }
+
     private LinearLayout createPreviewCard() {
         LinearLayout card = createCard();
         card.addView(sectionTitle(R.string.bridge_visual_preview_title), matchWrap());
@@ -552,6 +590,33 @@ public final class BridgeVisualSettingsActivity extends Activity {
         applyConfig(visualConfig.withShowRecordingArea(checked), true);
     }
 
+    private void onRecordingOnlyWaveformChanged(CompoundButton button, boolean checked) {
+        if (visualConfig.showWaveformOnlyWhileRecording == checked) return;
+        if (!explainedRecordingOnlyWaveform) {
+            button.setOnCheckedChangeListener(null);
+            button.setChecked(!checked);
+            button.setOnCheckedChangeListener(this::onRecordingOnlyWaveformChanged);
+            showFeatureExplanationIfNeeded(
+                true,
+                R.string.bridge_recording_only_waveform_title,
+                R.string.feature_bridge_recording_only_waveform_off_desc,
+                R.string.feature_bridge_recording_only_waveform_on_desc,
+                () -> {
+                    explainedRecordingOnlyWaveform = true;
+                    button.setOnCheckedChangeListener(null);
+                    button.setChecked(checked);
+                    button.setOnCheckedChangeListener(this::onRecordingOnlyWaveformChanged);
+                    applyConfig(
+                        visualConfig.withShowWaveformOnlyWhileRecording(checked),
+                        true
+                    );
+                }
+            );
+            return;
+        }
+        applyConfig(visualConfig.withShowWaveformOnlyWhileRecording(checked), true);
+    }
+
     private void showFeatureExplanationIfNeeded(
         boolean needed,
         int titleRes,
@@ -642,6 +707,14 @@ public final class BridgeVisualSettingsActivity extends Activity {
             showRecordingAreaSwitch.setOnCheckedChangeListener(null);
             showRecordingAreaSwitch.setChecked(config.showRecordingArea);
             showRecordingAreaSwitch.setOnCheckedChangeListener(this::onShowRecordingAreaChanged);
+        }
+        if (recordingOnlyWaveformSwitch != null &&
+            recordingOnlyWaveformSwitch.isChecked() != config.showWaveformOnlyWhileRecording) {
+            recordingOnlyWaveformSwitch.setOnCheckedChangeListener(null);
+            recordingOnlyWaveformSwitch.setChecked(config.showWaveformOnlyWhileRecording);
+            recordingOnlyWaveformSwitch.setOnCheckedChangeListener(
+                this::onRecordingOnlyWaveformChanged
+            );
         }
         if (save) BridgeVisualPrefs.saveForSettings(this, config);
     }

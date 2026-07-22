@@ -24,6 +24,8 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
     public static final String COLUMN_HEIGHT_DP = BridgeVisualPrefs.KEY_HEIGHT_DP;
     public static final String COLUMN_HOST_TARGET = BridgeVisualPrefs.KEY_HOST_TARGET;
     public static final String COLUMN_SHOW_RECORDING_AREA = BridgeVisualPrefs.KEY_SHOW_RECORDING_AREA;
+    public static final String COLUMN_SHOW_WAVEFORM_ONLY_WHILE_RECORDING =
+        BridgeVisualPrefs.KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING;
     public static final String COLUMN_MODULE_VERSION = "module_version";
 
     private static final int CODE_CONFIG = 1;
@@ -53,6 +55,7 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             COLUMN_HEIGHT_DP,
             COLUMN_HOST_TARGET,
             COLUMN_SHOW_RECORDING_AREA,
+            COLUMN_SHOW_WAVEFORM_ONLY_WHILE_RECORDING,
             COLUMN_MODULE_VERSION
         });
         cursor.addRow(new Object[] {
@@ -60,6 +63,7 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             config.heightDp,
             config.hostTarget,
             config.showRecordingArea ? 1 : 0,
+            config.showWaveformOnlyWhileRecording ? 1 : 0,
             BridgeContract.MODULE_VERSION
         });
         return cursor;
@@ -92,6 +96,9 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
         int height = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_HEIGHT_DP));
         String host = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_HOST_TARGET));
         boolean show = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_SHOW_RECORDING_AREA)) != 0;
-        return new BridgeVisualPrefs.VisualConfig(width, height, host, show);
+        boolean recordingOnly = cursor.getInt(
+            cursor.getColumnIndexOrThrow(COLUMN_SHOW_WAVEFORM_ONLY_WHILE_RECORDING)
+        ) != 0;
+        return new BridgeVisualPrefs.VisualConfig(width, height, host, show, recordingOnly);
     }
 }
