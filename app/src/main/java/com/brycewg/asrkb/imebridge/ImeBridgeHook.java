@@ -246,6 +246,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         XposedBridge.log(TAG + ": applied visual prefs host=" + config.hostTarget +
             " showRecordingArea=" + config.showRecordingArea +
             " showWaveformOnlyWhileRecording=" + config.showWaveformOnlyWhileRecording +
+            " tapToToggleRecording=" + config.tapToToggleRecording +
             " size=" + config.widthDp + "x" + config.heightDp);
 
         if (!config.showRecordingArea) {

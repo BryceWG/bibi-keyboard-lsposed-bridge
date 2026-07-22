@@ -33,11 +33,15 @@
     <string name="feature_bridge_host_target_off_desc">手动目标不会回退。若所选版本不可用，PCM 与剪贴板桥接请求会失败。</string>
     <string name="feature_bridge_host_target_on_desc">自动模式优先连接说点啥 Pro，失败后回退开源版；手动选择 Pro 或开源版时不回退。</string>
     <string name="bridge_show_recording_area_title">显示录音区域</string>
-    <string name="bridge_show_recording_area_summary">在被 Hook 的输入法底部注入波形与长按录音区域。</string>
-    <string name="feature_bridge_show_recording_area_off_desc">不再注入波形和长按录音区域；文字插入、窗口可见性与剪贴板桥接仍可用。</string>
-    <string name="feature_bridge_show_recording_area_on_desc">在被 Hook 的输入法底部显示波形和长按录音区域。更改最多在下一次输入法窗口显示时生效。</string>
+    <string name="bridge_show_recording_area_summary">在被 Hook 的输入法底部注入波形与录音区域。</string>
+    <string name="feature_bridge_show_recording_area_off_desc">不再注入波形和录音区域；文字插入、窗口可见性与剪贴板桥接仍可用。</string>
+    <string name="feature_bridge_show_recording_area_on_desc">在被 Hook 的输入法底部显示波形和录音区域。更改最多在下一次输入法窗口显示时生效。</string>
     <string name="bridge_recording_only_waveform_title">仅录音时显示波形</string>
-    <string name="bridge_recording_only_waveform_summary">隐藏空闲波形，但保留长按录音区域。</string>
+    <string name="bridge_recording_only_waveform_summary">隐藏空闲波形，但保留录音区域。</string>
     <string name="feature_bridge_recording_only_waveform_off_desc">空闲和录音时均显示波形。</string>
-    <string name="feature_bridge_recording_only_waveform_on_desc">空闲时隐藏波形，长按录音区域仍可用，录音时显示动态波形。更改最多在下一次输入法窗口显示时生效。</string>
+    <string name="feature_bridge_recording_only_waveform_on_desc">空闲时隐藏波形，录音区域仍可用，录音时显示动态波形。更改最多在下一次输入法窗口显示时生效。</string>
+    <string name="bridge_tap_to_toggle_recording_title">点按启停录音</string>
+    <string name="bridge_tap_to_toggle_recording_summary">点按两次控制录音，无需持续按住录音区域。</string>
+    <string name="feature_bridge_tap_to_toggle_recording_off_desc">长按录音区域开始录音，松开结束；移出区域会取消录音。</string>
+    <string name="feature_bridge_tap_to_toggle_recording_on_desc">点按一次开始录音，再次点按结束。更改最多在下一次输入法窗口显示时生效。</string>
 </resources>

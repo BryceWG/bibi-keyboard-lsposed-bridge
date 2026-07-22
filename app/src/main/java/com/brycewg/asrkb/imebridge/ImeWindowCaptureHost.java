@@ -153,6 +153,7 @@ final class ImeWindowCaptureHost {
         strip.setShowWaveformOnlyWhileRecording(
             visualConfig.showWaveformOnlyWhileRecording
         );
+        strip.setTapToToggleRecording(visualConfig.tapToToggleRecording);
         FrameLayout.LayoutParams params = buildLayoutParams(root, visualConfig, density);
         lastStripHeightPx = params.height;
         ViewGroup.LayoutParams existing = strip.getLayoutParams();

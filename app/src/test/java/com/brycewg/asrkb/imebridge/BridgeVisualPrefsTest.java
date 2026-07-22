@@ -29,6 +29,7 @@ public class BridgeVisualPrefsTest {
         assertEquals(BridgeContract.HOST_TARGET_AUTO, defaults.hostTarget);
         assertTrue(defaults.showRecordingArea);
         assertFalse(defaults.showWaveformOnlyWhileRecording);
+        assertFalse(defaults.tapToToggleRecording);
     }
 
     @Test
@@ -46,16 +47,21 @@ public class BridgeVisualPrefsTest {
             40,
             BridgeContract.HOST_TARGET_PRO,
             false,
+            true,
             true
         );
         assertEquals(BridgeContract.HOST_TARGET_PRO, base.withSize(200, 48).hostTarget);
         assertFalse(base.withSize(200, 48).showRecordingArea);
         assertTrue(base.withSize(200, 48).showWaveformOnlyWhileRecording);
+        assertTrue(base.withSize(200, 48).tapToToggleRecording);
         assertTrue(base.withShowRecordingArea(true).showRecordingArea);
         assertTrue(base.withShowRecordingArea(true).showWaveformOnlyWhileRecording);
         assertTrue(base.withHostTarget(BridgeContract.HOST_TARGET_AUTO)
             .showWaveformOnlyWhileRecording);
         assertFalse(base.withShowWaveformOnlyWhileRecording(false).showRecordingArea);
+        assertTrue(base.withShowWaveformOnlyWhileRecording(false).tapToToggleRecording);
+        assertFalse(base.withTapToToggleRecording(false).showRecordingArea);
+        assertTrue(base.withTapToToggleRecording(false).showWaveformOnlyWhileRecording);
         assertEquals(
             BridgeContract.HOST_TARGET_OPEN_SOURCE,
             base.withHostTarget(BridgeContract.HOST_TARGET_OPEN_SOURCE).hostTarget

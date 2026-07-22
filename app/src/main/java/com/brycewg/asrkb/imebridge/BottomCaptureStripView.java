@@ -1,5 +1,5 @@
 /*
- * Tiny bottom-edge long-press target with lightweight recording feedback.
+ * Tiny bottom-edge recording target with lightweight feedback.
  *
  * Module: lsposed-ime-bridge
  */
@@ -25,6 +25,9 @@ final class BottomCaptureStripView extends View {
     }
 
     static final int HEIGHT_DP = 32;
+    static final int TAP_ACTION_NONE = 0;
+    static final int TAP_ACTION_START = 1;
+    static final int TAP_ACTION_FINISH = 2;
     /** Faster than the system long-press timeout so capture feels snappy. */
     static final long CAPTURE_LONG_PRESS_MS = 220L;
     // 独立 Xposed 模块无法依赖主 app UiColors；这是系统 accent/Monet 均不可用时的最后兜底。
@@ -33,6 +36,8 @@ final class BottomCaptureStripView extends View {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final BridgeWaveformPainter waveformPainter = new BridgeWaveformPainter();
     private final LongPressCaptureGesture gesture;
+    private final TapCaptureGesture tapGesture;
+    private final Listener listener;
     private final long longPressTimeoutMs;
     private final int waveformColor;
     private final Runnable longPressRunnable = new Runnable() {
@@ -45,9 +50,12 @@ final class BottomCaptureStripView extends View {
     private WaveformState waveformState = WaveformState.idle();
     private BridgeCaptureStatus captureStatus = BridgeCaptureStatus.ready("attached");
     private boolean showWaveformOnlyWhileRecording;
+    private boolean tapToToggleRecording;
+    private int pendingTapAction = TAP_ACTION_NONE;
 
     BottomCaptureStripView(Context context, Listener listener) {
         super(context);
+        this.listener = listener;
         float slop = ViewConfiguration.get(context).getScaledTouchSlop();
         longPressTimeoutMs = Math.min(ViewConfiguration.getLongPressTimeout(), CAPTURE_LONG_PRESS_MS);
         waveformColor = resolveWaveformColor(context);
@@ -71,6 +79,7 @@ final class BottomCaptureStripView extends View {
                 }
             }
         );
+        tapGesture = new TapCaptureGesture(slop);
         setWillNotDraw(false);
         setBackgroundColor(Color.TRANSPARENT);
         setFocusable(false);
@@ -86,6 +95,15 @@ final class BottomCaptureStripView extends View {
     void setShowWaveformOnlyWhileRecording(boolean enabled) {
         showWaveformOnlyWhileRecording = enabled;
         applyWaveformState();
+    }
+
+    void setTapToToggleRecording(boolean enabled) {
+        if (tapToToggleRecording == enabled) return;
+        mainHandler.removeCallbacks(longPressRunnable);
+        gesture.onCancel();
+        tapGesture.cancel();
+        pendingTapAction = TAP_ACTION_NONE;
+        tapToToggleRecording = enabled;
     }
 
     private void applyWaveformState() {
@@ -105,19 +123,42 @@ final class BottomCaptureStripView extends View {
         if (event == null) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                if (tapToToggleRecording) {
+                    tapGesture.onDown(event.getX(), event.getY());
+                    pendingTapAction = tapAction(captureStatus);
+                    return true;
+                }
                 gesture.onDown(event.getX(), event.getY(), event.getEventTime());
                 mainHandler.removeCallbacks(longPressRunnable);
                 mainHandler.postDelayed(longPressRunnable, longPressTimeoutMs);
                 return true;
             case MotionEvent.ACTION_MOVE:
+                if (tapToToggleRecording) {
+                    tapGesture.onMove(
+                        event.getX(),
+                        event.getY(),
+                        isWithinStrip(event.getX(), event.getY())
+                    );
+                    return true;
+                }
                 gesture.onMove(event.getX(), event.getY(), isWithinStrip(event.getX(), event.getY()));
                 if (!gesture.isPending()) mainHandler.removeCallbacks(longPressRunnable);
                 return true;
             case MotionEvent.ACTION_UP:
+                if (tapToToggleRecording) {
+                    if (tapGesture.onUp()) dispatchTapAction(pendingTapAction);
+                    pendingTapAction = TAP_ACTION_NONE;
+                    return true;
+                }
                 mainHandler.removeCallbacks(longPressRunnable);
                 gesture.onUp();
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                if (tapToToggleRecording) {
+                    tapGesture.cancel();
+                    pendingTapAction = TAP_ACTION_NONE;
+                    return true;
+                }
                 mainHandler.removeCallbacks(longPressRunnable);
                 gesture.onCancel();
                 return true;
@@ -130,6 +171,8 @@ final class BottomCaptureStripView extends View {
     protected void onDetachedFromWindow() {
         mainHandler.removeCallbacks(longPressRunnable);
         gesture.onCancel();
+        tapGesture.cancel();
+        pendingTapAction = TAP_ACTION_NONE;
         waveformState = WaveformState.reset();
         waveformPainter.resetAnimationState();
         super.onDetachedFromWindow();
@@ -184,6 +227,27 @@ final class BottomCaptureStripView extends View {
             // Keep rendering available inside third-party IME processes with unusual themes.
         }
         return FALLBACK_WAVEFORM_COLOR;
+    }
+
+    static int tapAction(BridgeCaptureStatus status) {
+        if (status == null) return TAP_ACTION_NONE;
+        if (status.state == BridgeCaptureStatus.State.READY ||
+            status.state == BridgeCaptureStatus.State.FAILED) {
+            return TAP_ACTION_START;
+        }
+        if (status.state == BridgeCaptureStatus.State.STARTING ||
+            status.state == BridgeCaptureStatus.State.RECORDING) {
+            return TAP_ACTION_FINISH;
+        }
+        return TAP_ACTION_NONE;
+    }
+
+    private void dispatchTapAction(int action) {
+        if (action == TAP_ACTION_START && listener != null) {
+            listener.onCaptureHoldStarted();
+        } else if (action == TAP_ACTION_FINISH && listener != null) {
+            listener.onCaptureHoldReleased();
+        }
     }
 
     private boolean isWithinStrip(float x, float y) {

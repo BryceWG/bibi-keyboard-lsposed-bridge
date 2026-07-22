@@ -25,6 +25,7 @@ final class BridgeVisualPrefs {
     static final String KEY_HOST_TARGET = "host_target";
     static final String KEY_SHOW_RECORDING_AREA = "show_recording_area";
     static final String KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING = "show_waveform_only_while_recording";
+    static final String KEY_TAP_TO_TOGGLE_RECORDING = "tap_to_toggle_recording";
 
     private BridgeVisualPrefs() {
     }
@@ -35,6 +36,7 @@ final class BridgeVisualPrefs {
             DEFAULT_HEIGHT_DP,
             BridgeContract.HOST_TARGET_AUTO,
             true,
+            false,
             false
         );
     }
@@ -52,7 +54,8 @@ final class BridgeVisualPrefs {
             prefs.getInt(KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP),
             prefs.getString(KEY_HOST_TARGET, BridgeContract.HOST_TARGET_AUTO),
             prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true),
-            prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false)
+            prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false),
+            prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false)
         );
     }
 
@@ -68,6 +71,7 @@ final class BridgeVisualPrefs {
                 KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING,
                 config.showWaveformOnlyWhileRecording
             )
+            .putBoolean(KEY_TAP_TO_TOGGLE_RECORDING, config.tapToToggleRecording)
             .apply();
     }
 
@@ -132,9 +136,10 @@ final class BridgeVisualPrefs {
         final String hostTarget;
         final boolean showRecordingArea;
         final boolean showWaveformOnlyWhileRecording;
+        final boolean tapToToggleRecording;
 
         VisualConfig(int widthDp, int heightDp) {
-            this(widthDp, heightDp, BridgeContract.HOST_TARGET_AUTO, true, false);
+            this(widthDp, heightDp, BridgeContract.HOST_TARGET_AUTO, true, false, false);
         }
 
         VisualConfig(
@@ -142,13 +147,15 @@ final class BridgeVisualPrefs {
             int heightDp,
             String hostTarget,
             boolean showRecordingArea,
-            boolean showWaveformOnlyWhileRecording
+            boolean showWaveformOnlyWhileRecording,
+            boolean tapToToggleRecording
         ) {
             this.widthDp = clampWidthDp(widthDp);
             this.heightDp = clampHeightDp(heightDp);
             this.hostTarget = BridgeContract.normalizeHostTarget(hostTarget);
             this.showRecordingArea = showRecordingArea;
             this.showWaveformOnlyWhileRecording = showWaveformOnlyWhileRecording;
+            this.tapToToggleRecording = tapToToggleRecording;
         }
 
         VisualConfig withSize(int widthDp, int heightDp) {
@@ -157,7 +164,8 @@ final class BridgeVisualPrefs {
                 heightDp,
                 hostTarget,
                 showRecordingArea,
-                showWaveformOnlyWhileRecording
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording
             );
         }
 
@@ -167,7 +175,8 @@ final class BridgeVisualPrefs {
                 heightDp,
                 hostTarget,
                 showRecordingArea,
-                showWaveformOnlyWhileRecording
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording
             );
         }
 
@@ -177,12 +186,31 @@ final class BridgeVisualPrefs {
                 heightDp,
                 hostTarget,
                 showRecordingArea,
-                showWaveformOnlyWhileRecording
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording
             );
         }
 
         VisualConfig withShowWaveformOnlyWhileRecording(boolean enabled) {
-            return new VisualConfig(widthDp, heightDp, hostTarget, showRecordingArea, enabled);
+            return new VisualConfig(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                enabled,
+                tapToToggleRecording
+            );
+        }
+
+        VisualConfig withTapToToggleRecording(boolean enabled) {
+            return new VisualConfig(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                enabled
+            );
         }
     }
 }
