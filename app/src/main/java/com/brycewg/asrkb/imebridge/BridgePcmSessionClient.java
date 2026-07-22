@@ -36,7 +36,8 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
             );
         }
         BridgeCaptureCoordinator.OperationResult last = null;
-        for (String appPackage : BridgeContract.MAIN_APP_PACKAGES) {
+        String[] hostPackages = BridgeHostRouting.packages();
+        for (String appPackage : hostPackages) {
             unbind();
             BridgeCaptureCoordinator.OperationResult bound = bindTo(appPackage);
             if (!bound.isSuccess()) {
@@ -52,6 +53,8 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
                 return result;
             }
             last = result;
+            // Manual mode: do not fall back to another host.
+            if (hostPackages.length == 1) break;
         }
         unbind();
         if (last != null) return last;

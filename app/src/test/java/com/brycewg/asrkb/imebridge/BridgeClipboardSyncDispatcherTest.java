@@ -46,6 +46,23 @@ public class BridgeClipboardSyncDispatcherTest {
         assertFalse("stale show activated after hide", client.activated.get());
     }
 
+    @Test
+    public void hostTransitionDeactivatesBeforeReconnect() throws Exception {
+        CountDownLatch firstActivateStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirstActivate = new CountDownLatch(1);
+        OrderedClient client = new OrderedClient(firstActivateStarted, releaseFirstActivate);
+        BridgeClipboardSyncDispatcher dispatcher = new BridgeClipboardSyncDispatcher(client);
+
+        dispatcher.windowShown("third.party.ime");
+        assertTrue(firstActivateStarted.await(1, TimeUnit.SECONDS));
+        dispatcher.transitionHosts(null);
+        releaseFirstActivate.countDown();
+        dispatcher.windowShown("third.party.ime");
+        assertTrue(client.secondActivateStarted.await(1, TimeUnit.SECONDS));
+        assertTrue("old session was not closed before reconnect", client.deactivatedBeforeSecondActivate);
+        dispatcher.destroy();
+    }
+
     private static final class FakeClient implements BridgeClipboardSyncDispatcher.Client {
         private final CountDownLatch bindStarted;
         private final CountDownLatch releaseBind;
@@ -78,6 +95,47 @@ public class BridgeClipboardSyncDispatcherTest {
         @Override
         public void deactivate() {
             deactivated.countDown();
+        }
+    }
+
+    private static final class OrderedClient implements BridgeClipboardSyncDispatcher.Client {
+        private final CountDownLatch firstActivateStarted;
+        private final CountDownLatch releaseFirstActivate;
+        private final CountDownLatch secondActivateStarted = new CountDownLatch(1);
+        private boolean deactivated;
+        private boolean deactivatedBeforeSecondActivate;
+        private int activateCount;
+
+        OrderedClient(CountDownLatch firstActivateStarted, CountDownLatch releaseFirstActivate) {
+            this.firstActivateStarted = firstActivateStarted;
+            this.releaseFirstActivate = releaseFirstActivate;
+        }
+
+        @Override
+        public boolean activate(String targetImePackage, BooleanSupplier isCurrent) {
+            activateCount++;
+            if (activateCount == 1) {
+                firstActivateStarted.countDown();
+                try {
+                    releaseFirstActivate.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+                return isCurrent.getAsBoolean();
+            }
+            deactivatedBeforeSecondActivate = deactivated;
+            secondActivateStarted.countDown();
+            return isCurrent.getAsBoolean();
+        }
+
+        @Override
+        public void windowHidden() {
+        }
+
+        @Override
+        public void deactivate() {
+            deactivated = true;
         }
     }
 }

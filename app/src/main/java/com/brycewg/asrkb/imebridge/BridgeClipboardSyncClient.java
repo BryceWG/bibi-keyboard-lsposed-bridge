@@ -47,10 +47,19 @@ final class BridgeClipboardSyncClient implements BridgeClipboardSyncDispatcher.C
         String targetImePackage,
         BooleanSupplier isCurrent
     ) {
+        return activate(targetImePackage, BridgeHostRouting.packages(), isCurrent);
+    }
+
+    synchronized boolean activate(
+        String targetImePackage,
+        String[] hostPackages,
+        BooleanSupplier isCurrent
+    ) {
         if (transport == null || targetImePackage == null || targetImePackage.length() == 0) {
             return false;
         }
         if (!isCurrent.getAsBoolean()) return false;
+        String[] candidates = sanitizeHostPackages(hostPackages);
         // Screen Session：同一目标已绑定则保持，避免普通隐藏后再显示时反复握手。
         if (targetImePackage.equals(activeTargetPackage) &&
             transport.isBinderAlive() &&
@@ -58,7 +67,7 @@ final class BridgeClipboardSyncClient implements BridgeClipboardSyncDispatcher.C
             return true;
         }
         String sessionId = UUID.randomUUID().toString();
-        for (String appPackage : BridgeContract.MAIN_APP_PACKAGES) {
+        for (String appPackage : candidates) {
             if (!isCurrent.getAsBoolean()) break;
             transport.unbind();
             if (!transport.bindTo(appPackage)) continue;
@@ -73,9 +82,18 @@ final class BridgeClipboardSyncClient implements BridgeClipboardSyncDispatcher.C
                 activeTargetPackage = targetImePackage;
                 return true;
             }
+            // Manual mode: do not fall back.
+            if (candidates.length == 1) break;
         }
         transport.unbind();
         return false;
+    }
+
+    private static String[] sanitizeHostPackages(String[] hostPackages) {
+        if (hostPackages == null || hostPackages.length == 0) {
+            return BridgeContract.MAIN_APP_PACKAGES;
+        }
+        return hostPackages;
     }
 
     @Override

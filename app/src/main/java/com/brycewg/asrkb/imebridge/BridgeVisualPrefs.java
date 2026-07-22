@@ -1,5 +1,5 @@
 /*
- * Module-owned visual preferences for the IME bridge capture strip.
+ * Module-owned preferences for capture-strip visuals and host routing.
  *
  * Module: lsposed-ime-bridge
  */
@@ -7,9 +7,7 @@ package com.brycewg.asrkb.imebridge;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-
-import java.io.File;
-import java.lang.reflect.Method;
+import android.util.Log;
 
 final class BridgeVisualPrefs {
     static final int MIN_WIDTH_DP = 120;
@@ -20,16 +18,28 @@ final class BridgeVisualPrefs {
     static final int DEFAULT_HEIGHT_DP = 32;
     private static final int BASE_BOTTOM_MARGIN_DP = 8;
 
-    private static final String MODULE_PACKAGE = "com.brycewg.asrkb.imebridge";
+    private static final String TAG = "BiBiImeBridge";
     private static final String PREF_NAME = "bridge_visual";
-    private static final String KEY_WIDTH_DP = "capture_width_dp";
-    private static final String KEY_HEIGHT_DP = "capture_height_dp";
+    static final String KEY_WIDTH_DP = "capture_width_dp";
+    static final String KEY_HEIGHT_DP = "capture_height_dp";
+    static final String KEY_HOST_TARGET = "host_target";
+    static final String KEY_SHOW_RECORDING_AREA = "show_recording_area";
 
     private BridgeVisualPrefs() {
     }
 
     static VisualConfig defaults() {
-        return new VisualConfig(DEFAULT_WIDTH_DP, DEFAULT_HEIGHT_DP);
+        return new VisualConfig(
+            DEFAULT_WIDTH_DP,
+            DEFAULT_HEIGHT_DP,
+            BridgeContract.HOST_TARGET_AUTO,
+            true
+        );
+    }
+
+    /** Capture strip should wait for the first onWindowShown prefs load. */
+    static boolean shouldAttachCapture(boolean appliedConfigInitialized, boolean showRecordingArea) {
+        return appliedConfigInitialized && showRecordingArea;
     }
 
     static VisualConfig readForSettings(Context context) {
@@ -37,33 +47,57 @@ final class BridgeVisualPrefs {
         SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         return new VisualConfig(
             prefs.getInt(KEY_WIDTH_DP, DEFAULT_WIDTH_DP),
-            prefs.getInt(KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP)
+            prefs.getInt(KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP),
+            prefs.getString(KEY_HOST_TARGET, BridgeContract.HOST_TARGET_AUTO),
+            prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true)
         );
     }
 
     static void saveForSettings(Context context, VisualConfig config) {
         if (context == null || config == null) return;
-        SharedPreferences.Editor editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit();
-        editor.putInt(KEY_WIDTH_DP, clampWidthDp(config.widthDp));
-        editor.putInt(KEY_HEIGHT_DP, clampHeightDp(config.heightDp));
-        editor.commit();
-        makePrefsReadableBestEffort(context);
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_WIDTH_DP, clampWidthDp(config.widthDp))
+            .putInt(KEY_HEIGHT_DP, clampHeightDp(config.heightDp))
+            .putString(KEY_HOST_TARGET, BridgeContract.normalizeHostTarget(config.hostTarget))
+            .putBoolean(KEY_SHOW_RECORDING_AREA, config.showRecordingArea)
+            .apply();
     }
 
-    static VisualConfig readForHook() {
+    static VisualConfig readForHook(Context context) {
+        if (context == null) return defaults();
         try {
-            Class<?> prefsClass = Class.forName("de.robv.android.xposed.XSharedPreferences");
-            Object prefs = prefsClass
-                .getConstructor(String.class, String.class)
-                .newInstance(MODULE_PACKAGE, PREF_NAME);
-            invokeNoArgIfPresent(prefsClass, prefs, "makeWorldReadable");
-            invokeNoArgIfPresent(prefsClass, prefs, "reload");
-            Method getInt = prefsClass.getMethod("getInt", String.class, int.class);
-            int widthDp = (Integer) getInt.invoke(prefs, KEY_WIDTH_DP, DEFAULT_WIDTH_DP);
-            int heightDp = (Integer) getInt.invoke(prefs, KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP);
-            return new VisualConfig(widthDp, heightDp);
-        } catch (Throwable ignored) {
+            android.database.Cursor cursor = context.getContentResolver().query(
+                BridgeVisualPrefsProvider.CONTENT_URI,
+                null,
+                null,
+                null,
+                null
+            );
+            if (cursor == null) return defaults();
+            try {
+                VisualConfig config = BridgeVisualPrefsProvider.configFromCursor(cursor);
+                if (config == null) return defaults();
+                logHook("visual prefs loaded via ContentProvider" +
+                    " showRecordingArea=" + config.showRecordingArea +
+                    " size=" + config.widthDp + "x" + config.heightDp);
+                return config;
+            } finally {
+                cursor.close();
+            }
+        } catch (Throwable t) {
+            logHook("ContentProvider visual prefs failed: " + t);
             return defaults();
+        }
+    }
+
+    private static void logHook(String message) {
+        Log.w(TAG, message);
+        try {
+            Class<?> bridge = Class.forName("de.robv.android.xposed.XposedBridge");
+            bridge.getMethod("log", String.class).invoke(null, TAG + ": " + message);
+        } catch (Throwable ignored) {
+            // Settings process has no XposedBridge.
         }
     }
 
@@ -85,33 +119,33 @@ final class BridgeVisualPrefs {
         return BASE_BOTTOM_MARGIN_DP + extra;
     }
 
-    private static void invokeNoArgIfPresent(Class<?> cls, Object target, String methodName) {
-        try {
-            cls.getMethod(methodName).invoke(target);
-        } catch (Throwable ignored) {
-            // Optional across Xposed implementations.
-        }
-    }
-
-    private static void makePrefsReadableBestEffort(Context context) {
-        try {
-            File prefsDir = new File(context.getApplicationInfo().dataDir, "shared_prefs");
-            File prefsFile = new File(prefsDir, PREF_NAME + ".xml");
-            prefsDir.setExecutable(true, false);
-            prefsDir.setReadable(true, false);
-            prefsFile.setReadable(true, false);
-        } catch (Throwable ignored) {
-            // LSPatch/modern Android may reject this; hook side falls back to defaults.
-        }
-    }
-
     static final class VisualConfig {
         final int widthDp;
         final int heightDp;
+        final String hostTarget;
+        final boolean showRecordingArea;
 
         VisualConfig(int widthDp, int heightDp) {
+            this(widthDp, heightDp, BridgeContract.HOST_TARGET_AUTO, true);
+        }
+
+        VisualConfig(int widthDp, int heightDp, String hostTarget, boolean showRecordingArea) {
             this.widthDp = clampWidthDp(widthDp);
             this.heightDp = clampHeightDp(heightDp);
+            this.hostTarget = BridgeContract.normalizeHostTarget(hostTarget);
+            this.showRecordingArea = showRecordingArea;
+        }
+
+        VisualConfig withSize(int widthDp, int heightDp) {
+            return new VisualConfig(widthDp, heightDp, hostTarget, showRecordingArea);
+        }
+
+        VisualConfig withHostTarget(String hostTarget) {
+            return new VisualConfig(widthDp, heightDp, hostTarget, showRecordingArea);
+        }
+
+        VisualConfig withShowRecordingArea(boolean showRecordingArea) {
+            return new VisualConfig(widthDp, heightDp, hostTarget, showRecordingArea);
         }
     }
 }

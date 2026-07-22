@@ -7,7 +7,7 @@ package com.brycewg.asrkb.imebridge;
 
 final class BridgeContract {
     static final int PROTOCOL_VERSION = 1;
-    static final String MODULE_VERSION = "0.2.5";
+    static final String MODULE_VERSION = "0.2.8";
 
     static final String PACKAGE_OPEN_SOURCE = "com.brycewg.asrkb";
     static final String PACKAGE_PRO = "com.brycewg.asrkb.pro";
@@ -15,6 +15,9 @@ final class BridgeContract {
         PACKAGE_PRO,
         PACKAGE_OPEN_SOURCE
     };
+    static final String HOST_TARGET_AUTO = "auto";
+    static final String HOST_TARGET_PRO = "pro";
+    static final String HOST_TARGET_OPEN_SOURCE = "open_source";
     static final String PERMISSION_OPEN_SOURCE = "com.brycewg.asrkb.permission.IME_BRIDGE";
     static final String PERMISSION_PRO = "com.brycewg.asrkb.pro.permission.IME_BRIDGE";
     static final String[] PERMISSIONS = {
@@ -125,6 +128,33 @@ final class BridgeContract {
         if (PERMISSION_OPEN_SOURCE.equals(permission)) return PACKAGE_OPEN_SOURCE;
         if (PERMISSION_PRO.equals(permission)) return PACKAGE_PRO;
         return null;
+    }
+
+    static String normalizeHostTarget(String value) {
+        if (HOST_TARGET_PRO.equals(value) || HOST_TARGET_OPEN_SOURCE.equals(value)) {
+            return value;
+        }
+        return HOST_TARGET_AUTO;
+    }
+
+    static String[] candidatePackagesForHostTarget(String hostTarget) {
+        String normalized = normalizeHostTarget(hostTarget);
+        if (HOST_TARGET_PRO.equals(normalized)) {
+            return new String[] { PACKAGE_PRO };
+        }
+        if (HOST_TARGET_OPEN_SOURCE.equals(normalized)) {
+            return new String[] { PACKAGE_OPEN_SOURCE };
+        }
+        return MAIN_APP_PACKAGES.clone();
+    }
+
+    static String[] candidatePermissionsForHostTarget(String hostTarget) {
+        String[] packages = candidatePackagesForHostTarget(hostTarget);
+        String[] permissions = new String[packages.length];
+        for (int i = 0; i < packages.length; i++) {
+            permissions[i] = permissionForAppPackage(packages[i]);
+        }
+        return permissions;
     }
 
     static String pcmMessageForCode(int code) {

@@ -19,6 +19,7 @@ import org.junit.Test;
 public class BridgeClipboardSyncClientTest {
     @Test
     public void proRejectionFallsBackToOssAndKeepsOssSession() {
+        BridgeHostRouting.apply(BridgeContract.HOST_TARGET_AUTO);
         HostFallbackTransport transport = new HostFallbackTransport();
         BridgeClipboardSyncClient client = new BridgeClipboardSyncClient(transport);
 
@@ -31,6 +32,20 @@ public class BridgeClipboardSyncClientTest {
         );
         assertEquals(BridgeContract.PACKAGE_OPEN_SOURCE, transport.hiddenHost);
         assertEquals(transport.ossSessionId, transport.hiddenSessionId);
+    }
+
+    @Test
+    public void proOnlyDoesNotFallBackToOpenSource() {
+        BridgeHostRouting.apply(BridgeContract.HOST_TARGET_PRO);
+        try {
+            HostFallbackTransport transport = new HostFallbackTransport();
+            BridgeClipboardSyncClient client = new BridgeClipboardSyncClient(transport);
+
+            assertFalse(client.activate("third.party.ime", () -> true));
+            assertEquals(Arrays.asList(BridgeContract.PACKAGE_PRO), transport.bindAttempts);
+        } finally {
+            BridgeHostRouting.apply(BridgeContract.HOST_TARGET_AUTO);
+        }
     }
 
     @Test

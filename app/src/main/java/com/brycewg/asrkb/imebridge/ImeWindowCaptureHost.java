@@ -32,14 +32,19 @@ final class ImeWindowCaptureHost {
     private BridgeCaptureStatus status = BridgeCaptureStatus.unsupported("not attached");
     private int attachRetries;
     private int lastStripHeightPx;
+    private BridgeVisualPrefs.VisualConfig visualConfig = BridgeVisualPrefs.defaults();
 
     ImeWindowCaptureHost(Listener listener, String targetPackage) {
         this.listener = listener;
         this.targetPackage = targetPackage;
     }
 
+    void setVisualConfig(BridgeVisualPrefs.VisualConfig config) {
+        if (config != null) visualConfig = config;
+    }
+
     void attachLater(final InputMethodService service) {
-        mainHandler.post(new Runnable() {
+        runOnMain(new Runnable() {
             @Override
             public void run() {
                 attachNow(service);
@@ -48,21 +53,36 @@ final class ImeWindowCaptureHost {
     }
 
     void detach() {
-        mainHandler.post(new Runnable() {
+        runOnMain(new Runnable() {
             @Override
             public void run() {
+                cancelPendingAttachWork();
                 detachNow();
             }
         });
     }
 
     void updateCaptureStatus(final BridgeCaptureStatus captureStatus) {
-        mainHandler.post(new Runnable() {
+        runOnMain(new Runnable() {
             @Override
             public void run() {
                 if (stripView != null) stripView.updateStatus(captureStatus);
             }
         });
+    }
+
+    private void runOnMain(Runnable action) {
+        if (action == null) return;
+        if (Looper.myLooper() == mainHandler.getLooper()) {
+            action.run();
+            return;
+        }
+        mainHandler.post(action);
+    }
+
+    private void cancelPendingAttachWork() {
+        mainHandler.removeCallbacksAndMessages(null);
+        attachRetries = 0;
     }
 
     BridgeCaptureStatus getStatus() {
@@ -98,20 +118,22 @@ final class ImeWindowCaptureHost {
             return;
         }
         attachRetries = 0;
-        BridgeVisualPrefs.VisualConfig visualConfig = BridgeVisualPrefs.readForHook();
+        BridgeVisualPrefs.VisualConfig config = visualConfig != null
+            ? visualConfig
+            : BridgeVisualPrefs.defaults();
         float density = service.getResources().getDisplayMetrics().density;
         if (stripView != null && stripView.getParent() == root) {
-            applyVisualLayout(stripView, root, visualConfig, density);
+            applyVisualLayout(stripView, root, config, density);
             setStatus(BridgeCaptureStatus.ready("attached"));
             return;
         }
         detachNow();
         stripView = new BottomCaptureStripView(service, listener);
-        applyVisualLayout(stripView, root, visualConfig, density);
+        applyVisualLayout(stripView, root, config, density);
         try {
-            root.addView(stripView, buildLayoutParams(root, visualConfig, density));
+            root.addView(stripView, buildLayoutParams(root, config, density));
             attachedRoot = root;
-            lastStripHeightPx = Math.round(BridgeVisualPrefs.clampHeightDp(visualConfig.heightDp) * density);
+            lastStripHeightPx = Math.round(BridgeVisualPrefs.clampHeightDp(config.heightDp) * density);
             setStatus(BridgeCaptureStatus.ready("attached"));
         } catch (Throwable t) {
             stripView = null;

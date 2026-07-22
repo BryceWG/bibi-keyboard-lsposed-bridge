@@ -22,9 +22,11 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,10 +35,14 @@ public final class BridgeVisualSettingsActivity extends Activity {
     private TextView widthValue;
     private TextView heightValue;
     private TextView languageValue;
+    private TextView hostTargetValue;
+    private Switch showRecordingAreaSwitch;
     private BridgeWaveformPreviewView idlePreview;
     private BridgeWaveformPreviewView recordingPreview;
     private SeekBar widthSeekBar;
     private SeekBar heightSeekBar;
+    private boolean explainedHostTarget;
+    private boolean explainedShowRecordingArea;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -65,6 +71,8 @@ public final class BridgeVisualSettingsActivity extends Activity {
         content.addView(createHeader());
         content.addView(createDocsButton(), topMargin(dp(24)));
         content.addView(createLanguageCard(), topMargin(dp(14)));
+        content.addView(createHostTargetCard(), topMargin(dp(14)));
+        content.addView(createShowRecordingAreaCard(), topMargin(dp(14)));
         content.addView(createPreviewCard(), topMargin(dp(14)));
         content.addView(createSizeCard(), topMargin(dp(14)));
         content.addView(createResetButton(), topMargin(dp(20)));
@@ -222,6 +230,96 @@ public final class BridgeVisualSettingsActivity extends Activity {
         return card;
     }
 
+    private LinearLayout createHostTargetCard() {
+        LinearLayout card = createCard();
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setBackground(rippleSurface(dp(20)));
+        card.setOnClickListener(v -> showHostTargetPicker());
+        card.setContentDescription(getString(R.string.bridge_host_target_change));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout textColumn = new LinearLayout(this);
+        textColumn.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        );
+        row.addView(textColumn, textParams);
+
+        textColumn.addView(sectionTitle(R.string.bridge_host_target_title), matchWrap());
+        TextView summary = secondaryText(R.string.bridge_host_target_summary);
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.topMargin = dp(4);
+        textColumn.addView(summary, summaryParams);
+
+        hostTargetValue = new TextView(this);
+        hostTargetValue.setText(labelForHostTarget(visualConfig.hostTarget));
+        hostTargetValue.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        hostTargetValue.setTextColor(color(R.color.bridge_accent));
+        hostTargetValue.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        hostTargetValue.setPadding(dp(12), dp(6), dp(12), dp(6));
+        hostTargetValue.setBackground(chipBackground(color(R.color.bridge_accent_soft), dp(999)));
+        LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        valueParams.setMarginStart(dp(12));
+        row.addView(hostTargetValue, valueParams);
+
+        TextView chevron = new TextView(this);
+        chevron.setText("›");
+        chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        chevron.setTextColor(color(R.color.bridge_text_tertiary));
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        chevronParams.setMarginStart(dp(4));
+        row.addView(chevron, chevronParams);
+
+        card.addView(row, matchWrap());
+        return card;
+    }
+
+    private LinearLayout createShowRecordingAreaCard() {
+        LinearLayout card = createCard();
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout textColumn = new LinearLayout(this);
+        textColumn.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        );
+        row.addView(textColumn, textParams);
+        textColumn.addView(sectionTitle(R.string.bridge_show_recording_area_title), matchWrap());
+        TextView summary = secondaryText(R.string.bridge_show_recording_area_summary);
+        LinearLayout.LayoutParams summaryParams = matchWrap();
+        summaryParams.topMargin = dp(4);
+        textColumn.addView(summary, summaryParams);
+
+        showRecordingAreaSwitch = new Switch(this);
+        showRecordingAreaSwitch.setChecked(visualConfig.showRecordingArea);
+        showRecordingAreaSwitch.setOnCheckedChangeListener(this::onShowRecordingAreaChanged);
+        LinearLayout.LayoutParams switchParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        switchParams.setMarginStart(dp(12));
+        row.addView(showRecordingAreaSwitch, switchParams);
+
+        card.addView(row, matchWrap());
+        return card;
+    }
+
     private LinearLayout createPreviewCard() {
         LinearLayout card = createCard();
         card.addView(sectionTitle(R.string.bridge_visual_preview_title), matchWrap());
@@ -269,7 +367,7 @@ public final class BridgeVisualSettingsActivity extends Activity {
             BridgeVisualPrefs.MAX_WIDTH_DP - BridgeVisualPrefs.MIN_WIDTH_DP,
             visualConfig.widthDp - BridgeVisualPrefs.MIN_WIDTH_DP,
             (progress) -> applyConfig(
-                new BridgeVisualPrefs.VisualConfig(
+                visualConfig.withSize(
                     BridgeVisualPrefs.MIN_WIDTH_DP + progress,
                     visualConfig.heightDp
                 ),
@@ -288,7 +386,7 @@ public final class BridgeVisualSettingsActivity extends Activity {
             BridgeVisualPrefs.MAX_HEIGHT_DP - BridgeVisualPrefs.MIN_HEIGHT_DP,
             visualConfig.heightDp - BridgeVisualPrefs.MIN_HEIGHT_DP,
             (progress) -> applyConfig(
-                new BridgeVisualPrefs.VisualConfig(
+                visualConfig.withSize(
                     visualConfig.widthDp,
                     BridgeVisualPrefs.MIN_HEIGHT_DP + progress
                 ),
@@ -395,6 +493,97 @@ public final class BridgeVisualSettingsActivity extends Activity {
         return badge;
     }
 
+    private void showHostTargetPicker() {
+        showFeatureExplanationIfNeeded(
+            !explainedHostTarget,
+            R.string.bridge_host_target_title,
+            R.string.feature_bridge_host_target_off_desc,
+            R.string.feature_bridge_host_target_on_desc,
+            () -> {
+                explainedHostTarget = true;
+                openHostTargetChoices();
+            }
+        );
+    }
+
+    private void openHostTargetChoices() {
+        final String[] values = {
+            BridgeContract.HOST_TARGET_AUTO,
+            BridgeContract.HOST_TARGET_PRO,
+            BridgeContract.HOST_TARGET_OPEN_SOURCE
+        };
+        CharSequence[] labels = new CharSequence[values.length];
+        int checked = 0;
+        for (int i = 0; i < values.length; i++) {
+            labels[i] = labelForHostTarget(values[i]);
+            if (values[i].equals(visualConfig.hostTarget)) checked = i;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.bridge_host_target_title)
+            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                applyConfig(visualConfig.withHostTarget(values[which]), true);
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void onShowRecordingAreaChanged(CompoundButton button, boolean checked) {
+        if (visualConfig.showRecordingArea == checked) return;
+        if (!explainedShowRecordingArea) {
+            button.setOnCheckedChangeListener(null);
+            button.setChecked(!checked);
+            button.setOnCheckedChangeListener(this::onShowRecordingAreaChanged);
+            showFeatureExplanationIfNeeded(
+                true,
+                R.string.bridge_show_recording_area_title,
+                R.string.feature_bridge_show_recording_area_off_desc,
+                R.string.feature_bridge_show_recording_area_on_desc,
+                () -> {
+                    explainedShowRecordingArea = true;
+                    button.setOnCheckedChangeListener(null);
+                    button.setChecked(checked);
+                    button.setOnCheckedChangeListener(this::onShowRecordingAreaChanged);
+                    applyConfig(visualConfig.withShowRecordingArea(checked), true);
+                }
+            );
+            return;
+        }
+        applyConfig(visualConfig.withShowRecordingArea(checked), true);
+    }
+
+    private void showFeatureExplanationIfNeeded(
+        boolean needed,
+        int titleRes,
+        int offDescRes,
+        int onDescRes,
+        Runnable onContinue
+    ) {
+        if (!needed) {
+            onContinue.run();
+            return;
+        }
+        new AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setMessage(
+                getString(offDescRes) + "\n\n" + getString(onDescRes)
+            )
+            .setPositiveButton(android.R.string.ok, (dialog, which) -> onContinue.run())
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private String labelForHostTarget(String hostTarget) {
+        String normalized = BridgeContract.normalizeHostTarget(hostTarget);
+        if (BridgeContract.HOST_TARGET_PRO.equals(normalized)) {
+            return getString(R.string.bridge_host_target_pro);
+        }
+        if (BridgeContract.HOST_TARGET_OPEN_SOURCE.equals(normalized)) {
+            return getString(R.string.bridge_host_target_open_source);
+        }
+        return getString(R.string.bridge_host_target_auto);
+    }
+
     private void showLanguagePicker() {
         String[] tags = BridgeLocalePrefs.supportedTags();
         CharSequence[] labels = new CharSequence[tags.length];
@@ -444,6 +633,15 @@ public final class BridgeVisualSettingsActivity extends Activity {
         }
         if (heightSeekBar != null) {
             heightSeekBar.setProgress(config.heightDp - BridgeVisualPrefs.MIN_HEIGHT_DP);
+        }
+        if (hostTargetValue != null) {
+            hostTargetValue.setText(labelForHostTarget(config.hostTarget));
+        }
+        if (showRecordingAreaSwitch != null &&
+            showRecordingAreaSwitch.isChecked() != config.showRecordingArea) {
+            showRecordingAreaSwitch.setOnCheckedChangeListener(null);
+            showRecordingAreaSwitch.setChecked(config.showRecordingArea);
+            showRecordingAreaSwitch.setOnCheckedChangeListener(this::onShowRecordingAreaChanged);
         }
         if (save) BridgeVisualPrefs.saveForSettings(this, config);
     }

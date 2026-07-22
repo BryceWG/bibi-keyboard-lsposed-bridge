@@ -47,6 +47,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static boolean clipboardListenerRegistered;
     private static boolean suppressOwnClipboardChange;
     private static ClipboardManager.OnPrimaryClipChangedListener clipboardChangeListener;
+    private static BridgeVisualPrefs.VisualConfig appliedVisualConfig = BridgeVisualPrefs.defaults();
+    private static boolean appliedConfigInitialized;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -103,7 +105,14 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     imeWindowVisible = safeIsInputViewShown(service);
                     String hostPackage = resolveHostPackage(service);
                     registerBridgeReceiver(service, hostPackage);
-                    attachCaptureRuntime(service, hostPackage);
+                    if (BridgeVisualPrefs.shouldAttachCapture(
+                        appliedConfigInitialized,
+                        appliedVisualConfig.showRecordingArea
+                    )) {
+                        attachCaptureRuntime(service, hostPackage, appliedVisualConfig);
+                    } else {
+                        destroyCaptureRuntime(service);
+                    }
                     if (!restarting) resetBridgeReceiverPreview(service);
                 }
             }
@@ -129,8 +138,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 activeServiceRef = new WeakReference<>(service);
                 imeWindowVisible = true;
                 String hostPackage = resolveHostPackage(service);
-                registerBridgeReceiver(service, hostPackage);
-                attachCaptureRuntime(service, hostPackage);
+                applyRuntimeConfigOnWindowShown(service, hostPackage);
                 sendImeWindowVisibility(service, hostPackage, true);
                 showClipboardSyncRuntime(service);
             }
@@ -197,11 +205,52 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 dispatcher = new BridgeClipboardSyncDispatcher(new BridgeClipboardSyncClient(service));
                 CLIPBOARD_SYNC_DISPATCHERS.put(service, dispatcher);
             }
-            // 目标包名是被 Hook 的第三方 IME；宿主 Pro/OSS 由 client 自行优先选择。
+            // 目标包名是被 Hook 的第三方 IME；宿主 Pro/OSS 由 BridgeHostRouting 决定。
             // 不传 SyncClipboard 服务器地址或凭证。
             dispatcher.windowShown(targetImePackage);
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": clipboard sync runtime show error: " + t);
+        }
+    }
+
+    private static synchronized void transitionClipboardSyncHosts(InputMethodService service) {
+        if (service == null) return;
+        BridgeClipboardSyncDispatcher dispatcher = CLIPBOARD_SYNC_DISPATCHERS.get(service);
+        if (dispatcher == null) return;
+        try {
+            // Barrier close only; onWindowShown will reconnect via showClipboardSyncRuntime.
+            dispatcher.transitionHosts(null);
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": clipboard sync host transition error: " + t);
+        }
+    }
+
+    private static synchronized void applyRuntimeConfigOnWindowShown(
+        InputMethodService service,
+        String hostPackage
+    ) {
+        BridgeVisualPrefs.VisualConfig config = BridgeVisualPrefs.readForHook(service);
+        boolean hostChanged = appliedConfigInitialized &&
+            !config.hostTarget.equals(appliedVisualConfig.hostTarget);
+        BridgeHostRouting.apply(config.hostTarget);
+        CLIPBOARD_OBSERVERS.retainAllowedHosts();
+        syncBridgeReceivers(service, hostPackage);
+
+        if (hostChanged) {
+            cancelCaptureRuntime(service, "host target changed");
+            transitionClipboardSyncHosts(service);
+        }
+
+        appliedVisualConfig = config;
+        appliedConfigInitialized = true;
+        XposedBridge.log(TAG + ": applied visual prefs host=" + config.hostTarget +
+            " showRecordingArea=" + config.showRecordingArea +
+            " size=" + config.widthDp + "x" + config.heightDp);
+
+        if (!config.showRecordingArea) {
+            destroyCaptureRuntime(service);
+        } else {
+            attachCaptureRuntime(service, hostPackage, config);
         }
     }
 
@@ -228,12 +277,29 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     }
 
     private static synchronized void registerBridgeReceiver(InputMethodService service, String packageName) {
+        syncBridgeReceivers(service, packageName);
+    }
+
+    private static synchronized void syncBridgeReceivers(InputMethodService service, String packageName) {
+        if (service == null) return;
         List<BridgeReceiver> receivers = RECEIVERS.get(service);
         if (receivers == null) {
             receivers = new ArrayList<>();
             RECEIVERS.put(service, receivers);
         }
-        for (String permission : BridgeContract.PERMISSIONS) {
+        String[] desiredPermissions = BridgeHostRouting.permissions();
+        // Unregister receivers that are no longer allowed for the current host mode.
+        for (int i = receivers.size() - 1; i >= 0; i--) {
+            BridgeReceiver receiver = receivers.get(i);
+            if (isDesiredPermission(desiredPermissions, receiver.permission())) continue;
+            try {
+                service.unregisterReceiver(receiver);
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to unregister stale receiver: " + t);
+            }
+            receivers.remove(i);
+        }
+        for (String permission : desiredPermissions) {
             if (hasReceiverForPermission(receivers, permission)) continue;
             if (!isTrustedBridgePermission(service, permission)) continue;
             BridgeReceiver receiver = new BridgeReceiver(packageName, permission);
@@ -248,6 +314,14 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
         }
         if (receivers.isEmpty()) RECEIVERS.remove(service);
+    }
+
+    private static boolean isDesiredPermission(String[] desiredPermissions, String permission) {
+        if (permission == null) return false;
+        for (String desired : desiredPermissions) {
+            if (permission.equals(desired)) return true;
+        }
+        return false;
     }
 
     private static boolean hasReceiverForPermission(List<BridgeReceiver> receivers, String permission) {
@@ -277,13 +351,18 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
     }
 
-    private static synchronized void attachCaptureRuntime(InputMethodService service, String packageName) {
+    private static synchronized void attachCaptureRuntime(
+        InputMethodService service,
+        String packageName,
+        BridgeVisualPrefs.VisualConfig visualConfig
+    ) {
         if (service == null) return;
         CaptureRuntime runtime = CAPTURE_RUNTIMES.get(service);
         if (runtime == null) {
             runtime = new CaptureRuntime(service, packageName);
             CAPTURE_RUNTIMES.put(service, runtime);
         }
+        runtime.setVisualConfig(visualConfig);
         runtime.attachLater();
     }
 
@@ -364,7 +443,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
     private static void sendImeWindowVisibility(Context context, String imePackageName, boolean visible) {
         if (context == null) return;
-        for (String appPackageName : BridgeContract.MAIN_APP_PACKAGES) {
+        for (String appPackageName : BridgeHostRouting.packages()) {
             try {
                 Intent intent = new Intent(BridgeContract.ACTION_IME_WINDOW_VISIBILITY_CHANGED);
                 intent.setPackage(appPackageName);
@@ -577,6 +656,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             );
         }
 
+        void setVisualConfig(BridgeVisualPrefs.VisualConfig visualConfig) {
+            host.setVisualConfig(visualConfig);
+        }
+
         void attachLater() {
             InputMethodService service = serviceRef.get();
             if (service != null) host.attachLater(service);
@@ -693,6 +776,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         BridgeReceiver(String packageName, String permission) {
             this.packageName = packageName;
             this.permission = permission;
+        }
+
+        String permission() {
+            return permission;
         }
 
         boolean isRegisteredForPermission(String permission) {

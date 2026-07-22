@@ -24,4 +24,16 @@
     <string name="bridge_language_english">English</string>
     <string name="bridge_language_zh_cn">简体中文</string>
     <string name="bridge_language_zh_tw">繁體中文</string>
+    <string name="bridge_host_target_title">連線目標</string>
+    <string name="bridge_host_target_summary">選擇模組要連線說點啥的哪個版本。</string>
+    <string name="bridge_host_target_auto">自動（優先 Pro）</string>
+    <string name="bridge_host_target_pro">說點啥 Pro</string>
+    <string name="bridge_host_target_open_source">說點啥開源版</string>
+    <string name="bridge_host_target_change">變更連線目標</string>
+    <string name="feature_bridge_host_target_off_desc">手動目標不會回退。若所選版本不可用，PCM 與剪貼簿橋接請求會失敗。</string>
+    <string name="feature_bridge_host_target_on_desc">自動模式優先連線說點啥 Pro，失敗後回退開源版；手動選擇 Pro 或開源版時不回退。</string>
+    <string name="bridge_show_recording_area_title">顯示錄音區域</string>
+    <string name="bridge_show_recording_area_summary">在被 Hook 的輸入法底部注入波形與長按錄音區域。</string>
+    <string name="feature_bridge_show_recording_area_off_desc">不再注入波形與長按錄音區域；文字插入、視窗可見性與剪貼簿橋接仍可用。</string>
+    <string name="feature_bridge_show_recording_area_on_desc">在被 Hook 的輸入法底部顯示波形與長按錄音區域。變更最多在下一次輸入法視窗顯示時生效。</string>
 </resources>

@@ -32,10 +32,28 @@ final class BridgeClipboardSyncDispatcher {
     synchronized void windowShown(String targetImePackage) {
         if (destroyed) return;
         long currentGeneration = ++generation;
-        executor.execute(() -> client.activate(
-            targetImePackage,
-            () -> isCurrent(currentGeneration)
-        ));
+        executor.execute(() -> {
+            if (!isCurrent(currentGeneration)) return;
+            client.activate(targetImePackage, () -> isCurrent(currentGeneration));
+        });
+    }
+
+    /**
+     * Host-target transition barrier: close the old session before any reconnect.
+     * If {@code reconnectTargetImePackage} is non-null, activate only after deactivate completes.
+     */
+    synchronized void transitionHosts(String reconnectTargetImePackage) {
+        if (destroyed) return;
+        final boolean shouldActivate = reconnectTargetImePackage != null &&
+            reconnectTargetImePackage.length() > 0;
+        final String target = reconnectTargetImePackage;
+        final long barrierGeneration = ++generation;
+        executor.execute(() -> {
+            client.deactivate();
+            if (!shouldActivate) return;
+            if (!isCurrent(barrierGeneration)) return;
+            client.activate(target, () -> isCurrent(barrierGeneration));
+        });
     }
 
     synchronized void windowHidden() {

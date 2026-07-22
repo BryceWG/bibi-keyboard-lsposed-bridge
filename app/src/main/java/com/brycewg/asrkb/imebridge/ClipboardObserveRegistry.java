@@ -5,10 +5,8 @@
  */
 package com.brycewg.asrkb.imebridge;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 final class ClipboardObserveRegistry {
     static final class Subscription {
@@ -21,33 +19,44 @@ final class ClipboardObserveRegistry {
         }
     }
 
-    private final Map<String, String> tokensByPackage = new HashMap<>();
+    private String activePackageName;
+    private String activeToken;
 
     synchronized boolean subscribe(String appPackageName, String token) {
-        if (!isKnownPackage(appPackageName) || token == null || token.length() == 0) return false;
-        tokensByPackage.put(appPackageName, token);
+        if (!BridgeHostRouting.allowsPackage(appPackageName) ||
+            token == null ||
+            token.length() == 0) {
+            return false;
+        }
+        if (activePackageName != null && !activePackageName.equals(appPackageName)) {
+            for (String candidate : BridgeHostRouting.packages()) {
+                if (candidate.equals(activePackageName)) return false;
+                if (candidate.equals(appPackageName)) break;
+            }
+        }
+        activePackageName = appPackageName;
+        activeToken = token;
         return true;
     }
 
     synchronized void unsubscribe(String appPackageName) {
-        tokensByPackage.remove(appPackageName);
+        if (!appPackageName.equals(activePackageName)) return;
+        activePackageName = null;
+        activeToken = null;
+    }
+
+    synchronized void retainAllowedHosts() {
+        if (activePackageName == null || BridgeHostRouting.allowsPackage(activePackageName)) return;
+        activePackageName = null;
+        activeToken = null;
     }
 
     synchronized boolean hasSubscribers() {
-        return !tokensByPackage.isEmpty();
+        return activePackageName != null;
     }
 
     synchronized List<Subscription> snapshot() {
-        List<Subscription> result = new ArrayList<>();
-        for (String appPackageName : BridgeContract.MAIN_APP_PACKAGES) {
-            String token = tokensByPackage.get(appPackageName);
-            if (token != null) result.add(new Subscription(appPackageName, token));
-        }
-        return result;
-    }
-
-    private static boolean isKnownPackage(String appPackageName) {
-        return BridgeContract.PACKAGE_PRO.equals(appPackageName) ||
-            BridgeContract.PACKAGE_OPEN_SOURCE.equals(appPackageName);
+        if (activePackageName == null) return Collections.emptyList();
+        return Collections.singletonList(new Subscription(activePackageName, activeToken));
     }
 }

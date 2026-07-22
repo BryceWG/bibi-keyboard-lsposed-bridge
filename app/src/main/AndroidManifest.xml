@@ -18,6 +18,9 @@
         <meta-data
             android:name="xposedminversion"
             android:value="82" />
+        <meta-data
+            android:name="xposedsharedprefs"
+            android:value="true" />
 
         <activity
             android:name=".BridgeVisualSettingsActivity"
@@ -29,6 +32,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name=".BridgeVisualPrefsProvider"
+            android:authorities="com.brycewg.asrkb.imebridge.visualprefs"
+            android:exported="true"
+            android:grantUriPermissions="true" />
     </application>
 
 </manifest>
