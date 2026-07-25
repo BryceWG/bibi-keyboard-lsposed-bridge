@@ -8,8 +8,6 @@ package com.brycewg.asrkb.imebridge;
 final class BridgeWaveformMath {
     static final int SAMPLING_SIZE = 64;
     static final float MOVE_SPEED = 250f;
-    /** Fixed phase for the idle pose; 0.5 centers a peak for WaveLineView's sin envelope. */
-    static final long IDLE_POSE_MILLIS = Math.round(0.5f * MOVE_SPEED);
     static final int SENSIBILITY = 10;
     static final float PER_VOLUME = SENSIBILITY * 0.35f;
     static final float[] PATH_FUNCS = {0.6f, 0.35f, 0.1f, -0.1f};
@@ -56,29 +54,6 @@ final class BridgeWaveformMath {
         float volume = Math.max(0f, smoothedVolume);
         float realY = (float) (amplitude * value * PATH_FUNCS[layerIndex] * volume * 0.01f);
         return realY;
-    }
-
-    static float yOffsetPx(
-        WaveformState state,
-        float progress,
-        long millisPassed,
-        int layerIndex,
-        int viewHeight,
-        float density
-    ) {
-        if (state == null || !state.visible) return 0f;
-        long phaseMs = state.animated ? millisPassed : IDLE_POSE_MILLIS;
-        float volume = state.animated
-            ? displayVolume(state.targetVolume)
-            : state.targetVolume;
-        return layerYOffsetPx(
-            state.targetVolume,
-            volume,
-            progress,
-            phaseMs,
-            layerIndex,
-            viewHeight
-        );
     }
 
     static int peakToTargetVolume(int peak) {

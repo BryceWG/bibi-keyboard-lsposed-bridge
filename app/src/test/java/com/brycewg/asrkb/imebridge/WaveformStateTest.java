@@ -14,14 +14,6 @@ public class WaveformStateTest {
         assertEquals(WaveformState.IDLE_TARGET_VOLUME, state.targetVolume);
         assertTrue(state.waveformAlpha > 0);
         assertTrue(state.waveformAlpha <= 160);
-        float idleOffset = BridgeWaveformMath.yOffsetPx(state, 0.5f, 0L, 0, 48, 1f);
-        assertTrue(Math.abs(idleOffset) > 1f);
-        assertEquals(
-            idleOffset,
-            BridgeWaveformMath.yOffsetPx(state, 0.5f, 900L, 0, 48, 1f),
-            0.0001f
-        );
-        assertTrue(Math.abs(BridgeWaveformMath.calcValue(0f, 0.5f)) > 0.9d);
     }
 
     @Test

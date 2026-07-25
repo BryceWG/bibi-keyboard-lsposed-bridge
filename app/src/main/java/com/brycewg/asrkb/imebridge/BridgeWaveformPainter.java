@@ -38,18 +38,9 @@ final class BridgeWaveformPainter {
 
         if (!state.animated) {
             resetAnimationState();
-            drawStaticPose(
-                canvas,
-                left,
-                drawWidth,
-                centerY,
-                height,
-                BridgeWaveformMath.IDLE_POSE_MILLIS,
-                state.targetVolume,
-                color,
-                state.waveformAlpha,
-                density
-            );
+            paint.setColor(applyAlpha(color, state.waveformAlpha));
+            paint.setStrokeWidth(BridgeWaveformMath.idleStrokePx(density));
+            canvas.drawLine(left, centerY, left + drawWidth, centerY, paint);
             canvas.restoreToCount(save);
             return;
         }
@@ -81,32 +72,6 @@ final class BridgeWaveformPainter {
     void resetAnimationState() {
         recordingAnimStartMs = 0L;
         smoothedVolume = 0f;
-    }
-
-    private void drawStaticPose(
-        Canvas canvas,
-        float left,
-        float drawWidth,
-        float centerY,
-        int height,
-        long millisPassed,
-        float volume,
-        int color,
-        int primaryAlpha,
-        float density
-    ) {
-        drawLayers(
-            canvas,
-            left,
-            drawWidth,
-            centerY,
-            height,
-            millisPassed,
-            volume,
-            color,
-            primaryAlpha,
-            density
-        );
     }
 
     private void drawLayers(

@@ -40,30 +40,4 @@ public class BridgeWaveformMathTest {
         assertTrue(BridgeWaveformMath.secondaryAlpha(218) < 218);
     }
 
-    @Test
-    public void idlePoseUsesFixedPhase() {
-        assertEquals(125L, BridgeWaveformMath.IDLE_POSE_MILLIS);
-        float center = Math.abs(
-            BridgeWaveformMath.layerYOffsetPx(
-                WaveformState.IDLE_TARGET_VOLUME,
-                WaveformState.IDLE_TARGET_VOLUME,
-                0.5f,
-                BridgeWaveformMath.IDLE_POSE_MILLIS,
-                0,
-                48
-            )
-        );
-        float edge = Math.abs(
-            BridgeWaveformMath.layerYOffsetPx(
-                WaveformState.IDLE_TARGET_VOLUME,
-                WaveformState.IDLE_TARGET_VOLUME,
-                0.05f,
-                BridgeWaveformMath.IDLE_POSE_MILLIS,
-                0,
-                48
-            )
-        );
-        assertTrue(center > edge);
-        assertTrue(center > 1f);
-    }
 }
