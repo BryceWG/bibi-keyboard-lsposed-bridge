@@ -45,4 +45,12 @@ public class BridgeSessionGateTest {
 
         assertFalse(BridgeSessionGate.accepts(null, oldSessionId));
     }
+
+    @Test
+    public void sessionRequestRequiresSameEditorGeneration() {
+        assertTrue(BridgeSessionGate.accepts("session-1", "session-1", 7L, 7L));
+        assertFalse(BridgeSessionGate.accepts("session-1", "session-1", 7L, 8L));
+        assertFalse(BridgeSessionGate.accepts("session-1", "session-1", 0L, 0L));
+        assertTrue(BridgeSessionGate.accepts(null, null, 0L, 8L));
+    }
 }

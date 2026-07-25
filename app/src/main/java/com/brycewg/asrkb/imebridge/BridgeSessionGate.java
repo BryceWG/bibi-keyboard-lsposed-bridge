@@ -13,6 +13,17 @@ final class BridgeSessionGate {
         return !hasActiveSession;
     }
 
+    static boolean accepts(
+        String activeSessionId,
+        String requestSessionId,
+        long sessionEditorGeneration,
+        long currentEditorGeneration
+    ) {
+        if (!accepts(activeSessionId, requestSessionId)) return false;
+        return !hasValue(requestSessionId) ||
+            (sessionEditorGeneration > 0 && sessionEditorGeneration == currentEditorGeneration);
+    }
+
     private static boolean hasValue(String value) {
         return value != null && value.length() > 0;
     }

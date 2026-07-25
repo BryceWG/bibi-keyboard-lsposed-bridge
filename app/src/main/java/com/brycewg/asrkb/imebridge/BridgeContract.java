@@ -36,6 +36,8 @@ final class BridgeContract {
         "com.brycewg.asrkb.imebridge.action.QUERY_INPUT_CONTEXT";
     static final String ACTION_IME_WINDOW_VISIBILITY_CHANGED =
         "com.brycewg.asrkb.imebridge.action.IME_WINDOW_VISIBILITY_CHANGED";
+    static final String ACTION_EDITOR_LIFECYCLE_CHANGED =
+        "com.brycewg.asrkb.imebridge.action.EDITOR_LIFECYCLE_CHANGED";
     static final String ACTION_SET_CLIPBOARD_TEXT =
         "com.brycewg.asrkb.imebridge.action.SET_CLIPBOARD_TEXT";
     static final String ACTION_GET_CLIPBOARD_TEXT =
@@ -74,6 +76,13 @@ final class BridgeContract {
     static final String EXTRA_SUPPORTS_SESSIONS = "supports_sessions";
     static final String EXTRA_SUPPORTS_PCM_RECORDING = "supports_pcm_recording";
     static final String EXTRA_SUPPORTS_INPUT_CONTEXT = "supports_input_context";
+    static final String EXTRA_SUPPORTS_EDITOR_IDENTITY = "supports_editor_identity";
+    static final String EXTRA_EDITOR_GENERATION = "editor_generation";
+    static final String EXTRA_EDITOR_PACKAGE = "editor_package";
+    static final String EXTRA_ALLOWS_PERSONALIZED_LEARNING = "allows_personalized_learning";
+    static final String EXTRA_REQUIRE_PERSONALIZED_LEARNING = "require_personalized_learning";
+    static final String EXTRA_EDITOR_EVENT = "editor_event";
+    static final String EXTRA_EDITOR_EVENT_SEQUENCE = "editor_event_sequence";
     static final String EXTRA_SUPPORTS_CLIPBOARD = "supports_clipboard";
     static final String EXTRA_IS_CLIPBOARD_SENSITIVE = "is_clipboard_sensitive";
     static final String EXTRA_CLIPBOARD_TEXT_CHARS = "clipboard_text_chars";
@@ -95,6 +104,11 @@ final class BridgeContract {
     static final int RESULT_COMPOSING_FAILED = -8;
     static final int RESULT_SESSION_MISMATCH = -9;
     static final int RESULT_CLIPBOARD_FAILED = -10;
+    static final int RESULT_PERSONALIZED_LEARNING_DISABLED = -11;
+
+    static final String EDITOR_EVENT_CHANGED = "changed";
+    static final String EDITOR_EVENT_FINISHED = "finished";
+    static final String EDITOR_EVENT_ACTION = "action";
 
     static final int PCM_TRANSACTION_BEGIN = android.os.IBinder.FIRST_CALL_TRANSACTION + 0;
     static final int PCM_TRANSACTION_WRITE_FRAME = android.os.IBinder.FIRST_CALL_TRANSACTION + 1;

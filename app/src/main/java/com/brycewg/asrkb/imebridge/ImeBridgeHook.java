@@ -16,7 +16,6 @@ import android.inputmethodservice.InputMethodService;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PersistableBundle;
-import android.text.InputType;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
@@ -25,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -40,9 +40,13 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     private static final ClipboardObserveRegistry CLIPBOARD_OBSERVERS = new ClipboardObserveRegistry();
     private static final Map<InputMethodService, BridgeClipboardSyncDispatcher> CLIPBOARD_SYNC_DISPATCHERS =
         new WeakHashMap<>();
+    private static final AtomicLong EDITOR_GENERATION = new AtomicLong();
+    private static final AtomicLong EDITOR_EVENT_SEQUENCE = new AtomicLong();
 
     private static WeakReference<InputMethodService> activeServiceRef = new WeakReference<>(null);
     private static EditorInfo activeEditorInfo;
+    private static BridgeEditorIdentity activeEditorIdentity;
+    private static volatile String lastEditorEvent;
     private static boolean imeWindowVisible;
     private static boolean clipboardListenerRegistered;
     private static boolean suppressOwnClipboardChange;
@@ -98,10 +102,19 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     boolean restarting = param.args != null &&
                         param.args.length > 1 &&
                         Boolean.TRUE.equals(param.args[1]);
-                    activeServiceRef = new WeakReference<>(service);
-                    activeEditorInfo = param.args != null && param.args.length > 0
+                    EditorInfo nextEditorInfo = param.args != null && param.args.length > 0
                         ? (EditorInfo) param.args[0]
                         : null;
+                    BridgeEditorIdentity nextIdentity = editorIdentity(nextEditorInfo);
+                    boolean editorChanged = BridgeEditorIdentity.shouldAdvance(
+                        restarting,
+                        activeEditorIdentity,
+                        nextIdentity
+                    );
+                    if (editorChanged) EDITOR_GENERATION.incrementAndGet();
+                    activeServiceRef = new WeakReference<>(service);
+                    activeEditorInfo = nextEditorInfo;
+                    activeEditorIdentity = nextIdentity;
                     imeWindowVisible = safeIsInputViewShown(service);
                     String hostPackage = resolveHostPackage(service);
                     registerBridgeReceiver(service, hostPackage);
@@ -113,7 +126,15 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     } else {
                         destroyCaptureRuntime(service);
                     }
-                    if (!restarting) resetBridgeReceiverPreview(service);
+                    if (editorChanged) {
+                        resetBridgeReceiverPreview(service);
+                        sendEditorLifecycle(
+                            service,
+                            hostPackage,
+                            BridgeContract.EDITOR_EVENT_CHANGED,
+                            nextEditorInfo
+                        );
+                    }
                 }
             }
         );
@@ -122,13 +143,44 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 InputMethodService service = asImeService(param.thisObject);
+                if (service == null || service != activeServiceRef.get()) return;
+                EditorInfo finishedEditorInfo = activeEditorInfo;
+                EDITOR_GENERATION.incrementAndGet();
                 resetBridgeReceiverPreview(service);
                 cancelCaptureRuntime(service, "finish input");
-                if (service != null && service == activeServiceRef.get()) {
-                    activeEditorInfo = null;
-                }
+                activeEditorInfo = null;
+                activeEditorIdentity = null;
+                sendEditorLifecycle(
+                    service,
+                    resolveHostPackage(service),
+                    BridgeContract.EDITOR_EVENT_FINISHED,
+                    finishedEditorInfo
+                );
             }
         });
+
+        XposedHelpers.findAndHookMethod(
+            InputMethodService.class,
+            "sendDefaultEditorAction",
+            boolean.class,
+            new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (!Boolean.TRUE.equals(param.getResult())) return;
+                    InputMethodService service = asImeService(param.thisObject);
+                    if (service == null || service != activeServiceRef.get() ||
+                        activeEditorIdentity == null) {
+                        return;
+                    }
+                    sendEditorLifecycle(
+                        service,
+                        resolveHostPackage(service),
+                        BridgeContract.EDITOR_EVENT_ACTION,
+                        activeEditorInfo
+                    );
+                }
+            }
+        );
 
         XposedHelpers.findAndHookMethod(InputMethodService.class, "onWindowShown", new XC_MethodHook() {
             @Override
@@ -170,6 +222,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 if (service == activeServiceRef.get()) {
                     activeServiceRef = new WeakReference<>(null);
                     activeEditorInfo = null;
+                    activeEditorIdentity = null;
                     imeWindowVisible = false;
                 }
             }
@@ -178,6 +231,16 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
     private static InputMethodService asImeService(Object value) {
         return value instanceof InputMethodService ? (InputMethodService) value : null;
+    }
+
+    private static BridgeEditorIdentity editorIdentity(EditorInfo editorInfo) {
+        if (editorInfo == null) return null;
+        return new BridgeEditorIdentity(
+            editorInfo.packageName,
+            editorInfo.fieldId,
+            editorInfo.inputType,
+            editorInfo.imeOptions
+        );
     }
 
     private static String resolveHostPackage(InputMethodService service) {
@@ -460,6 +523,35 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
     }
 
+    private static void sendEditorLifecycle(
+        Context context,
+        String imePackageName,
+        String event,
+        EditorInfo editorInfo
+    ) {
+        if (context == null) return;
+        lastEditorEvent = event;
+        long eventSequence = EDITOR_EVENT_SEQUENCE.incrementAndGet();
+        for (String appPackageName : BridgeHostRouting.packages()) {
+            try {
+                Intent intent = new Intent(BridgeContract.ACTION_EDITOR_LIFECYCLE_CHANGED);
+                intent.setPackage(appPackageName);
+                intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                intent.putExtra(BridgeContract.EXTRA_PROTOCOL_VERSION, BridgeContract.PROTOCOL_VERSION);
+                intent.putExtra(BridgeContract.EXTRA_TARGET_PACKAGE, imePackageName);
+                intent.putExtra(BridgeContract.EXTRA_EDITOR_GENERATION, EDITOR_GENERATION.get());
+                intent.putExtra(BridgeContract.EXTRA_EDITOR_EVENT, event);
+                intent.putExtra(BridgeContract.EXTRA_EDITOR_EVENT_SEQUENCE, eventSequence);
+                if (editorInfo != null && editorInfo.packageName != null) {
+                    intent.putExtra(BridgeContract.EXTRA_EDITOR_PACKAGE, editorInfo.packageName);
+                }
+                context.sendBroadcast(intent, BridgeContract.permissionForAppPackage(appPackageName));
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": failed to send editor lifecycle: " + t);
+            }
+        }
+    }
+
     private static ClipboardManager clipboardManager(Context context) {
         if (context == null) return null;
         try {
@@ -620,18 +712,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     }
 
     private static boolean isSensitiveEditor(EditorInfo editorInfo) {
-        if (editorInfo == null) return false;
-        int variation = editorInfo.inputType & InputType.TYPE_MASK_VARIATION;
-        int inputClass = editorInfo.inputType & InputType.TYPE_MASK_CLASS;
-        if (inputClass == InputType.TYPE_CLASS_TEXT) {
-            return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
-                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
-                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
-        }
-        if (inputClass == InputType.TYPE_CLASS_NUMBER) {
-            return variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD;
-        }
-        return false;
+        return editorInfo != null && BridgeEditorPolicy.isSensitive(editorInfo.inputType);
     }
 
     private static final class CaptureRuntime implements
@@ -767,6 +848,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         private final String permission;
         private boolean composingPreviewActive;
         private String activeSessionId;
+        private long activeSessionEditorGeneration;
         private String currentOperation;
         private String lastOperation;
         private int lastResultCode;
@@ -934,6 +1016,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
             clearComposingPreviewIfOwned(inputConnection);
             activeSessionId = sessionId;
+            activeSessionEditorGeneration = EDITOR_GENERATION.get();
             finish(BridgeContract.RESULT_OK, "session started");
         }
 
@@ -948,6 +1031,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             InputConnection inputConnection = getInputConnection(service);
             boolean ok = inputConnection == null || clearComposingPreviewIfOwned(inputConnection);
             activeSessionId = null;
+            activeSessionEditorGeneration = 0L;
             if (ok) {
                 finish(BridgeContract.RESULT_OK, "session cancelled");
             } else {
@@ -1005,6 +1089,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
             if (ok && sessionId != null && sessionId.length() > 0) {
                 activeSessionId = null;
+                activeSessionEditorGeneration = 0L;
             }
             finish(ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMMIT_FAILED, ok ? "ok" : "commit failed");
         }
@@ -1085,6 +1170,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
             if (ok && sessionId != null && sessionId.length() > 0) {
                 activeSessionId = null;
+                activeSessionEditorGeneration = 0L;
             }
             finish(
                 ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMPOSING_FAILED,
@@ -1099,6 +1185,15 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
             if (isSensitiveField(activeEditorInfo)) {
                 finish(BridgeContract.RESULT_SENSITIVE_FIELD, "sensitive field");
+                return;
+            }
+            if (intent.getBooleanExtra(BridgeContract.EXTRA_REQUIRE_PERSONALIZED_LEARNING, false) &&
+                !allowsPersonalizedLearning(activeEditorInfo)
+            ) {
+                finish(
+                    BridgeContract.RESULT_PERSONALIZED_LEARNING_DISABLED,
+                    "personalized learning disabled"
+                );
                 return;
             }
 
@@ -1153,7 +1248,12 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
 
         private boolean isSessionAccepted(String sessionId) {
-            return BridgeSessionGate.accepts(activeSessionId, sessionId);
+            return BridgeSessionGate.accepts(
+                activeSessionId,
+                sessionId,
+                activeSessionEditorGeneration,
+                EDITOR_GENERATION.get()
+            );
         }
 
         private boolean clearComposingPreviewIfOwned(InputConnection inputConnection) {
@@ -1212,22 +1312,19 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
         void resetBridgeSessionState() {
             activeSessionId = null;
+            activeSessionEditorGeneration = 0L;
             resetComposingPreviewState();
         }
 
         private boolean isSensitiveField(EditorInfo editorInfo) {
-            if (editorInfo == null) return false;
-            int variation = editorInfo.inputType & InputType.TYPE_MASK_VARIATION;
-            int inputClass = editorInfo.inputType & InputType.TYPE_MASK_CLASS;
-            if (inputClass == InputType.TYPE_CLASS_TEXT) {
-                return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
-                    variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
-                    variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
-            }
-            if (inputClass == InputType.TYPE_CLASS_NUMBER) {
-                return variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD;
-            }
-            return false;
+            return editorInfo != null && BridgeEditorPolicy.isSensitive(editorInfo.inputType);
+        }
+
+        private boolean allowsPersonalizedLearning(EditorInfo editorInfo) {
+            return editorInfo != null && BridgeEditorPolicy.allowsPersonalizedLearning(
+                editorInfo.inputType,
+                editorInfo.imeOptions
+            );
         }
 
         private void fillStatusExtras(Bundle extras, InputMethodService service, InputConnection inputConnection) {
@@ -1246,6 +1343,22 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 captureRuntime != null && captureRuntime.supportsPcmRecording()
             );
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_INPUT_CONTEXT, true);
+            extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_EDITOR_IDENTITY, true);
+            extras.putLong(BridgeContract.EXTRA_EDITOR_GENERATION, EDITOR_GENERATION.get());
+            extras.putLong(
+                BridgeContract.EXTRA_EDITOR_EVENT_SEQUENCE,
+                EDITOR_EVENT_SEQUENCE.get()
+            );
+            if (lastEditorEvent != null) {
+                extras.putString(BridgeContract.EXTRA_EDITOR_EVENT, lastEditorEvent);
+            }
+            extras.putBoolean(
+                BridgeContract.EXTRA_ALLOWS_PERSONALIZED_LEARNING,
+                allowsPersonalizedLearning(activeEditorInfo)
+            );
+            if (activeEditorInfo != null && activeEditorInfo.packageName != null) {
+                extras.putString(BridgeContract.EXTRA_EDITOR_PACKAGE, activeEditorInfo.packageName);
+            }
             extras.putBoolean(BridgeContract.EXTRA_SUPPORTS_CLIPBOARD, true);
             if (activeSessionId != null) {
                 extras.putString(BridgeContract.EXTRA_ACTIVE_SESSION_ID, activeSessionId);
