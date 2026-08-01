@@ -17,6 +17,15 @@
     <string name="bridge_docs_summary">Open the IME Bridge introduction, install steps, and troubleshooting guide</string>
     <string name="bridge_docs_url">https://bibidocs.brycewg.com/en/advanced/ime-bridge.html</string>
     <string name="bridge_docs_open_failed">Unable to open the documentation link</string>
+    <string name="bridge_toast_no_input_connection">No editable text field in focus</string>
+    <string name="bridge_toast_sensitive_field">Voice input is unavailable in sensitive fields</string>
+    <string name="bridge_toast_microphone_unavailable">Allow the current input method to use the microphone</string>
+    <string name="bridge_toast_feature_disabled">The module feature is disabled in the app</string>
+    <string name="bridge_toast_protocol_mismatch">The module is incompatible with BiBi Keyboard. Update the module or app</string>
+    <string name="bridge_toast_connection_failed">Unable to connect to the module</string>
+    <string name="bridge_toast_session_unavailable">Voice input is unavailable with the current recognition settings</string>
+    <string name="bridge_toast_recording_failed">Recording failed. Try again</string>
+    <string name="bridge_toast_finish_failed">Unable to finish voice input. Try again</string>
     <string name="bridge_language_title">Language</string>
     <string name="bridge_language_summary">Settings screen only. Does not affect hooked input methods.</string>
     <string name="bridge_language_change">Change language</string>

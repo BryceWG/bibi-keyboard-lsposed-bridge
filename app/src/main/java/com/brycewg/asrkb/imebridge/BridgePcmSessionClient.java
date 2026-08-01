@@ -53,11 +53,16 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
                 return result;
             }
             last = result;
-            // Manual mode: do not fall back to another host.
-            if (hostPackages.length == 1) break;
+            // Do not mask an explicit configuration error with a later bind failure.
+            if (hostPackages.length == 1 || stopsFallbackFor(result.code)) break;
         }
         unbind();
-        if (last != null) return last;
+        if (last != null) {
+            int warningMessageRes = warningMessageResFor(last.code);
+            if (warningMessageRes != 0) BridgeUserNotifier.show(context, warningMessageRes);
+            return last;
+        }
+        BridgeUserNotifier.show(context, R.string.bridge_toast_connection_failed);
         return BridgeCaptureCoordinator.OperationResult.error(
             BridgeContract.PCM_RESULT_BRIDGE_UNAVAILABLE,
             "pcm service unavailable"
@@ -85,14 +90,16 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
             data.writeByteArray(pcm == null ? new byte[0] : pcm);
             data.writeInt(sampleRate);
             data.writeInt(channels);
-            binder.transact(BridgeContract.PCM_TRANSACTION_WRITE_FRAME, data, reply, 0);
+            if (!binder.transact(BridgeContract.PCM_TRANSACTION_WRITE_FRAME, data, reply, 0)) {
+                return BridgeCaptureCoordinator.OperationResult.error(
+                    BridgeContract.PCM_RESULT_UNSUPPORTED,
+                    "unsupported transaction"
+                );
+            }
             reply.readException();
             return readResult(reply);
         } catch (Throwable t) {
-            return BridgeCaptureCoordinator.OperationResult.error(
-                BridgeContract.PCM_RESULT_UNSUPPORTED,
-                t.getMessage() == null ? "write frame failed" : t.getMessage()
-            );
+            return transportFailure(t, "write frame failed");
         } finally {
             reply.recycle();
             data.recycle();
@@ -140,6 +147,35 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
         return activeSessionId != null && activeSessionId.equals(sessionId) && binder != null;
     }
 
+    static int warningMessageResFor(int resultCode) {
+        if (resultCode == BridgeContract.PCM_RESULT_FEATURE_DISABLED) {
+            return R.string.bridge_toast_feature_disabled;
+        }
+        if (resultCode == BridgeContract.PCM_RESULT_NO_INPUT_CONNECTION) {
+            return R.string.bridge_toast_no_input_connection;
+        }
+        if (resultCode == BridgeContract.PCM_RESULT_SENSITIVE_FIELD) {
+            return R.string.bridge_toast_sensitive_field;
+        }
+        if (resultCode == BridgeContract.PCM_RESULT_UNSUPPORTED) {
+            return R.string.bridge_toast_protocol_mismatch;
+        }
+        if (resultCode == BridgeContract.PCM_RESULT_SESSION_UNAVAILABLE) {
+            return R.string.bridge_toast_session_unavailable;
+        }
+        if (resultCode == BridgeContract.PCM_RESULT_BRIDGE_UNAVAILABLE) {
+            return R.string.bridge_toast_connection_failed;
+        }
+        return 0;
+    }
+
+    static boolean stopsFallbackFor(int resultCode) {
+        return resultCode == BridgeContract.PCM_RESULT_FEATURE_DISABLED ||
+            resultCode == BridgeContract.PCM_RESULT_NO_INPUT_CONNECTION ||
+            resultCode == BridgeContract.PCM_RESULT_SENSITIVE_FIELD ||
+            resultCode == BridgeContract.PCM_RESULT_SESSION_UNAVAILABLE;
+    }
+
     private BridgeCaptureCoordinator.OperationResult bindTo(String appPackage) {
         if (context == null) {
             return BridgeCaptureCoordinator.OperationResult.error(
@@ -158,9 +194,15 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
 
             @Override
             public void onServiceDisconnected(ComponentName name) {
+                boolean hadActiveSession;
                 synchronized (BridgePcmSessionClient.this) {
+                    if (connection != this) return;
+                    hadActiveSession = activeSessionId != null;
                     binder = null;
                     activeSessionId = null;
+                }
+                if (hadActiveSession) {
+                    BridgeUserNotifier.show(context, R.string.bridge_toast_connection_failed);
                 }
             }
         };
@@ -209,14 +251,16 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
         try {
             data.writeInterfaceToken(BridgeContract.PCM_DESCRIPTOR);
             data.writeString(sessionId);
-            binder.transact(code, data, reply, 0);
+            if (!binder.transact(code, data, reply, 0)) {
+                return BridgeCaptureCoordinator.OperationResult.error(
+                    BridgeContract.PCM_RESULT_UNSUPPORTED,
+                    "unsupported transaction"
+                );
+            }
             reply.readException();
             return readResult(reply);
         } catch (Throwable t) {
-            return BridgeCaptureCoordinator.OperationResult.error(
-                BridgeContract.PCM_RESULT_UNSUPPORTED,
-                t.getMessage() == null ? "transact failed" : t.getMessage()
-            );
+            return transportFailure(t, "transact failed");
         } finally {
             reply.recycle();
             data.recycle();
@@ -237,6 +281,21 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
             code,
             message == null ? BridgeContract.pcmMessageForCode(code) : message
         );
+    }
+
+    private BridgeCaptureCoordinator.OperationResult transportFailure(Throwable error, String fallbackMessage) {
+        int resultCode = transportFailureCodeFor(error);
+        if (resultCode == BridgeContract.PCM_RESULT_BRIDGE_UNAVAILABLE) {
+            BridgeUserNotifier.show(context, R.string.bridge_toast_connection_failed);
+        }
+        return BridgeCaptureCoordinator.OperationResult.error(
+            resultCode,
+            error.getMessage() == null ? fallbackMessage : error.getMessage()
+        );
+    }
+
+    static int transportFailureCodeFor(Throwable error) {
+        return BridgeContract.PCM_RESULT_BRIDGE_UNAVAILABLE;
     }
 
     private void unbind() {

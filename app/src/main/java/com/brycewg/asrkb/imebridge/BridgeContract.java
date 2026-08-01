@@ -132,6 +132,7 @@ final class BridgeContract {
     static final int PCM_RESULT_BUSY = -7;
     static final int PCM_RESULT_STALE_SESSION = -8;
     static final int PCM_RESULT_UNSUPPORTED = -9;
+    static final int PCM_RESULT_SESSION_UNAVAILABLE = -10;
 
     static String permissionForAppPackage(String appPackageName) {
         if (PACKAGE_PRO.equals(appPackageName)) return PERMISSION_PRO;
@@ -193,6 +194,8 @@ final class BridgeContract {
                 return "stale session";
             case PCM_RESULT_UNSUPPORTED:
                 return "unsupported";
+            case PCM_RESULT_SESSION_UNAVAILABLE:
+                return "session unavailable";
             default:
                 return "unknown: " + code;
         }

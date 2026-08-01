@@ -204,6 +204,101 @@ public class BridgeCaptureCoordinatorTest {
         assertEquals(1, client.cancelCalls);
         assertEquals(1, recorder.cancelCalls);
         assertEquals(0, client.finishCalls);
+        assertEquals(BridgeCaptureStatus.State.FAILED, statuses.last().state);
+        assertEquals(BridgeCaptureStatus.FAILURE_REASON_RECORDING, statuses.last().failureCode);
+    }
+
+    @Test
+    public void writeFailureCancelsAndReportsRecordingFailure() {
+        FakeEnvironment environment = new FakeEnvironment();
+        FakeSessionClient client = new FakeSessionClient();
+        client.failWrite = true;
+        FakeRecorder recorder = new FakeRecorder(true);
+        Statuses statuses = new Statuses();
+        BridgeCaptureCoordinator coordinator = newCoordinator(environment, client, recorder, statuses);
+
+        coordinator.startCapture();
+        recorder.emit(new byte[] {1, 0}, 12);
+
+        assertEquals(1, client.writeCalls);
+        assertEquals(1, client.cancelCalls);
+        assertEquals(BridgeCaptureStatus.State.FAILED, statuses.last().state);
+        assertEquals(BridgeCaptureStatus.FAILURE_REASON_RECORDING, statuses.last().failureCode);
+    }
+
+    @Test
+    public void queuedWriteFailureAfterFinishRequestStillReportsFailure() {
+        FakeEnvironment environment = new FakeEnvironment();
+        FakeSessionClient client = new FakeSessionClient();
+        client.failWrite = true;
+        FakeRecorder recorder = new FakeRecorder(true);
+        Statuses statuses = new Statuses();
+        QueuedExecutor executor = new QueuedExecutor();
+        BridgeCaptureCoordinator coordinator = new BridgeCaptureCoordinator(
+            environment,
+            client,
+            recorder,
+            statuses,
+            executor
+        );
+
+        coordinator.startCapture();
+        executor.runNext();
+        recorder.emit(new byte[] {1, 0}, 12);
+        coordinator.finishCapture();
+        executor.runAll();
+
+        assertEquals(0, client.finishCalls);
+        assertEquals(1, client.cancelCalls);
+        assertEquals(BridgeCaptureStatus.State.FAILED, statuses.last().state);
+        assertEquals(BridgeCaptureStatus.FAILURE_REASON_RECORDING, statuses.last().failureCode);
+    }
+
+    @Test
+    public void finishFailureReportsNotifiableFailure() {
+        FakeEnvironment environment = new FakeEnvironment();
+        FakeSessionClient client = new FakeSessionClient();
+        client.failFinish = true;
+        FakeRecorder recorder = new FakeRecorder(true);
+        Statuses statuses = new Statuses();
+        BridgeCaptureCoordinator coordinator = newCoordinator(environment, client, recorder, statuses);
+
+        coordinator.startCapture();
+        coordinator.finishCapture();
+
+        assertEquals(BridgeCaptureStatus.State.FAILED, statuses.last().state);
+        assertEquals(BridgeCaptureStatus.FAILURE_REASON_FINISH, statuses.last().failureCode);
+        assertEquals(
+            R.string.bridge_toast_finish_failed,
+            BridgeUserNotifier.captureFailureMessageResFor(statuses.last().failureCode)
+        );
+    }
+
+    @Test
+    public void recorderErrorDuringStopWinsOverFinish() {
+        FakeEnvironment environment = new FakeEnvironment();
+        FakeSessionClient client = new FakeSessionClient();
+        FakeRecorder recorder = new FakeRecorder(true);
+        recorder.failOnStop = true;
+        Statuses statuses = new Statuses();
+        QueuedExecutor executor = new QueuedExecutor();
+        BridgeCaptureCoordinator coordinator = new BridgeCaptureCoordinator(
+            environment,
+            client,
+            recorder,
+            statuses,
+            executor
+        );
+
+        coordinator.startCapture();
+        executor.runNext();
+        coordinator.finishCapture();
+        executor.runAll();
+
+        assertEquals(0, client.finishCalls);
+        assertEquals(1, client.cancelCalls);
+        assertEquals(BridgeCaptureStatus.State.FAILED, statuses.last().state);
+        assertEquals(BridgeCaptureStatus.FAILURE_REASON_RECORDING, statuses.last().failureCode);
     }
 
     @Test
@@ -270,6 +365,8 @@ public class BridgeCaptureCoordinatorTest {
         int cancelCalls;
         String activeSessionId;
         boolean requestAudioFocus;
+        boolean failWrite;
+        boolean failFinish;
 
         @Override
         public BridgeCaptureCoordinator.OperationResult begin(String sessionId) {
@@ -292,6 +389,12 @@ public class BridgeCaptureCoordinatorTest {
                 );
             }
             writeCalls++;
+            if (failWrite) {
+                return BridgeCaptureCoordinator.OperationResult.error(
+                    BridgeContract.PCM_RESULT_BRIDGE_UNAVAILABLE,
+                    "write failed"
+                );
+            }
             return BridgeCaptureCoordinator.OperationResult.ok("ok");
         }
 
@@ -299,6 +402,12 @@ public class BridgeCaptureCoordinatorTest {
         public BridgeCaptureCoordinator.OperationResult finish(String sessionId) {
             finishCalls++;
             activeSessionId = null;
+            if (failFinish) {
+                return BridgeCaptureCoordinator.OperationResult.error(
+                    BridgeContract.PCM_RESULT_BRIDGE_UNAVAILABLE,
+                    "finish failed"
+                );
+            }
             return BridgeCaptureCoordinator.OperationResult.ok("ok");
         }
 
@@ -327,6 +436,10 @@ public class BridgeCaptureCoordinatorTest {
             assertTrue("expected queued task", !tasks.isEmpty());
             tasks.remove(0).run();
         }
+
+        void runAll() {
+            while (!tasks.isEmpty()) tasks.remove(0).run();
+        }
     }
 
     private static final class FakeRecorder implements BridgeCaptureCoordinator.AudioRecorder {
@@ -338,6 +451,7 @@ public class BridgeCaptureCoordinatorTest {
         String sessionId;
         BridgeCaptureCoordinator.AudioRecorderCallback callback;
         boolean requestAudioFocus;
+        boolean failOnStop;
 
         FakeRecorder(boolean startResult) {
             this.startResult = startResult;
@@ -362,6 +476,9 @@ public class BridgeCaptureCoordinatorTest {
         public void stop() {
             stopCalls++;
             recording = false;
+            if (failOnStop && callback != null && sessionId != null) {
+                callback.onRecorderError(sessionId, "read failed while stopping");
+            }
         }
 
         @Override

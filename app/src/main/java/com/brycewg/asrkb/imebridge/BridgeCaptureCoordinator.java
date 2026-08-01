@@ -74,6 +74,7 @@ final class BridgeCaptureCoordinator {
         STARTING,
         RECORDING,
         FINISHING,
+        COMMITTING,
         CANCELLING
     }
 
@@ -154,11 +155,17 @@ final class BridgeCaptureCoordinator {
         synchronized (lock) {
             if (state != State.IDLE) return;
             if (environment == null || !environment.hasInputConnection()) {
-                updateStatusLocked(BridgeCaptureStatus.failed("no input connection"));
+                updateStatusLocked(BridgeCaptureStatus.failed(
+                    "no input connection",
+                    BridgeCaptureStatus.FAILURE_REASON_NO_INPUT_CONNECTION
+                ));
                 return;
             }
             if (environment.isSensitiveField()) {
-                updateStatusLocked(BridgeCaptureStatus.failed("sensitive field"));
+                updateStatusLocked(BridgeCaptureStatus.failed(
+                    "sensitive field",
+                    BridgeCaptureStatus.FAILURE_REASON_SENSITIVE_FIELD
+                ));
                 return;
             }
             state = State.STARTING;
@@ -209,7 +216,7 @@ final class BridgeCaptureCoordinator {
                 sessionClient.close();
                 return;
             }
-            if (state == State.CANCELLING || state == State.FINISHING) return;
+            if (state == State.CANCELLING || state == State.FINISHING || state == State.COMMITTING) return;
             state = State.CANCELLING;
             sessionId = activeSessionId;
             updateStatusLocked(BridgeCaptureStatus.cancelling(reason));
@@ -261,7 +268,7 @@ final class BridgeCaptureCoordinator {
             }
         });
         if (!started) {
-            failIfCurrent(sessionId, "audio record failed");
+            failIfCurrent(sessionId, "audio record failed", BridgeCaptureStatus.FAILURE_REASON_AUDIO_RECORD);
             return;
         }
 
@@ -277,6 +284,9 @@ final class BridgeCaptureCoordinator {
                 if (!shouldCancel && !shouldFinish) {
                     state = State.RECORDING;
                     updateStatusLocked(BridgeCaptureStatus.recording(0));
+                } else if (shouldFinish) {
+                    state = State.FINISHING;
+                    updateStatusLocked(BridgeCaptureStatus.finishing());
                 }
             }
         }
@@ -319,7 +329,7 @@ final class BridgeCaptureCoordinator {
         synchronized (lock) {
             shouldCancel = activeSessionId != null &&
                 activeSessionId.equals(sessionId) &&
-                (state == State.STARTING || state == State.RECORDING);
+                (state == State.STARTING || state == State.RECORDING || state == State.FINISHING);
             if (shouldCancel) {
                 state = State.CANCELLING;
                 updateStatusLocked(BridgeCaptureStatus.cancelling(message));
@@ -329,7 +339,11 @@ final class BridgeCaptureCoordinator {
         executor.execute(new Runnable() {
             @Override
             public void run() {
-                cancelSession(sessionId, message);
+                cancelSession(
+                    sessionId,
+                    message,
+                    BridgeCaptureStatus.FAILURE_REASON_RECORDING
+                );
             }
         });
     }
@@ -343,38 +357,59 @@ final class BridgeCaptureCoordinator {
     }
 
     private void finishSession(String sessionId) {
+        synchronized (lock) {
+            if (!sessionId.equals(activeSessionId) || state != State.FINISHING) return;
+        }
         recorder.stop();
+        synchronized (lock) {
+            if (!sessionId.equals(activeSessionId) || state != State.FINISHING) return;
+            state = State.COMMITTING;
+        }
         OperationResult result = sessionClient.finish(sessionId);
         synchronized (lock) {
-            if (sessionId.equals(activeSessionId)) {
+            if (sessionId.equals(activeSessionId) && state == State.COMMITTING) {
                 clearActiveLocked();
                 if (result.isSuccess()) {
                     updateStatusLocked(BridgeCaptureStatus.ready("ready"));
                 } else {
-                    updateStatusLocked(BridgeCaptureStatus.failed(result.message));
+                    updateStatusLocked(BridgeCaptureStatus.failed(
+                        result.message,
+                        BridgeCaptureStatus.FAILURE_REASON_FINISH
+                    ));
                 }
             }
         }
     }
 
     private void cancelSession(String sessionId, String reason) {
+        cancelSession(sessionId, reason, BridgeCaptureStatus.FAILURE_REASON_NONE);
+    }
+
+    private void cancelSession(String sessionId, String reason, int failureCode) {
         recorder.cancel();
         sessionClient.cancel(sessionId);
         synchronized (lock) {
             if (sessionId.equals(activeSessionId)) {
                 clearActiveLocked();
-                updateStatusLocked(BridgeCaptureStatus.ready(reason == null ? "cancelled" : reason));
+                String message = reason == null ? "cancelled" : reason;
+                updateStatusLocked(failureCode == BridgeCaptureStatus.FAILURE_REASON_NONE
+                    ? BridgeCaptureStatus.ready(message)
+                    : BridgeCaptureStatus.failed(message, failureCode));
             }
         }
     }
 
     private void failIfCurrent(String sessionId, String message) {
+        failIfCurrent(sessionId, message, BridgeCaptureStatus.FAILURE_REASON_NONE);
+    }
+
+    private void failIfCurrent(String sessionId, String message, int failureCode) {
         recorder.cancel();
         sessionClient.cancel(sessionId);
         synchronized (lock) {
             if (sessionId.equals(activeSessionId)) {
                 clearActiveLocked();
-                updateStatusLocked(BridgeCaptureStatus.failed(message));
+                updateStatusLocked(BridgeCaptureStatus.failed(message, failureCode));
             }
         }
     }

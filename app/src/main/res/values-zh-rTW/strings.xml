@@ -17,6 +17,15 @@
     <string name="bridge_docs_summary">查看模組說明、安裝步驟與故障排除</string>
     <string name="bridge_docs_url">https://bibidocs.brycewg.com/advanced/ime-bridge.html</string>
     <string name="bridge_docs_open_failed">無法開啟文件連結</string>
+    <string name="bridge_toast_no_input_connection">無聚焦可編輯的輸入欄位</string>
+    <string name="bridge_toast_sensitive_field">無法在此處使用語音輸入</string>
+    <string name="bridge_toast_microphone_unavailable">請允許目前輸入法使用麥克風</string>
+    <string name="bridge_toast_feature_disabled">說點啥內的模組功能已關閉</string>
+    <string name="bridge_toast_protocol_mismatch">模組與說點啥版本不相容，請更新模組或應用</string>
+    <string name="bridge_toast_connection_failed">無法連線說點啥</string>
+    <string name="bridge_toast_session_unavailable">目前語音辨識設定無法用於此輸入方式</string>
+    <string name="bridge_toast_recording_failed">錄音失敗，請重試</string>
+    <string name="bridge_toast_finish_failed">無法完成語音輸入，請重試</string>
     <string name="bridge_language_title">語言</string>
     <string name="bridge_language_summary">僅作用於本設定頁，不影響被 Hook 的輸入法。</string>
     <string name="bridge_language_change">變更語言</string>

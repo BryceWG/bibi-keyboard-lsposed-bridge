@@ -840,6 +840,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         public void onCaptureStatusChanged(BridgeCaptureStatus status) {
             captureStatus = status;
             host.updateCaptureStatus(status);
+            BridgeUserNotifier.showCaptureFailure(serviceRef.get(), status);
         }
     }
 
