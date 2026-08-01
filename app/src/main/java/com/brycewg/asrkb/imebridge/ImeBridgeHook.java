@@ -857,6 +857,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         private String composingEditorPackageName;
         private int composingEditorFieldId;
         private int composingEditorInputType;
+        private final BridgeComposingPreviewOwnership composingPreviewOwnership =
+            new BridgeComposingPreviewOwnership();
 
         BridgeReceiver(String packageName, String permission) {
             this.packageName = packageName;
@@ -1074,8 +1076,12 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             try {
                 if (composingPreviewActive) {
                     if (isComposingPreviewForActiveEditor()) {
-                        ok = inputConnection.setComposingText(value, cursorPosition) &&
-                            inputConnection.finishComposingText();
+                        ok = composingPreviewOwnership.replaceAndFinish(
+                            inputConnection,
+                            EDITOR_GENERATION.get(),
+                            value,
+                            cursorPosition
+                        );
                         if (ok) resetComposingPreviewState();
                     } else {
                         resetComposingPreviewState();
@@ -1124,7 +1130,19 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             int cursorPosition = intent.getIntExtra(BridgeContract.EXTRA_CURSOR_POSITION, 1);
             boolean ok;
             try {
-                ok = inputConnection.setComposingText(value, cursorPosition);
+                if (value.length() == 0) {
+                    ok = composingPreviewOwnership.clear(
+                        inputConnection,
+                        EDITOR_GENERATION.get()
+                    );
+                } else {
+                    ok = composingPreviewOwnership.setPreview(
+                        inputConnection,
+                        EDITOR_GENERATION.get(),
+                        value,
+                        cursorPosition
+                    );
+                }
                 if (ok) {
                     if (value.length() > 0) {
                         rememberComposingEditor(activeEditorInfo);
@@ -1268,8 +1286,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 return true;
             }
             try {
-                boolean ok = inputConnection.setComposingText("", 1) &&
-                    inputConnection.finishComposingText();
+                boolean ok = composingPreviewOwnership.clear(
+                    inputConnection,
+                    EDITOR_GENERATION.get()
+                );
                 resetComposingPreviewState();
                 return ok;
             } catch (Throwable t) {
@@ -1309,6 +1329,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             composingEditorPackageName = null;
             composingEditorFieldId = 0;
             composingEditorInputType = 0;
+            composingPreviewOwnership.reset();
         }
 
         void resetBridgeSessionState() {
