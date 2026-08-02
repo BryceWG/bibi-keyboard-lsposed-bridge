@@ -20,6 +20,7 @@ final class BridgeVisualPrefs {
 
     private static final String TAG = "BiBiImeBridge";
     private static final String PREF_NAME = "bridge_visual";
+    private static final String HOOK_CACHE_PREF_NAME = "bridge_visual_hook_cache";
     static final String KEY_WIDTH_DP = "capture_width_dp";
     static final String KEY_HEIGHT_DP = "capture_height_dp";
     static final String KEY_HOST_TARGET = "host_target";
@@ -85,10 +86,11 @@ final class BridgeVisualPrefs {
                 null,
                 null
             );
-            if (cursor == null) return defaults();
+            if (cursor == null) return fallbackHookConfig(readHookCache(context));
             try {
                 VisualConfig config = BridgeVisualPrefsProvider.configFromCursor(cursor);
-                if (config == null) return defaults();
+                if (config == null) return fallbackHookConfig(readHookCache(context));
+                saveHookCache(context, config);
                 logHook("visual prefs loaded via ContentProvider" +
                     " showRecordingArea=" + config.showRecordingArea +
                     " size=" + config.widthDp + "x" + config.heightDp);
@@ -98,8 +100,61 @@ final class BridgeVisualPrefs {
             }
         } catch (Throwable t) {
             logHook("ContentProvider visual prefs failed: " + t);
-            return defaults();
+            return fallbackHookConfig(readHookCache(context));
         }
+    }
+
+    static VisualConfig fallbackHookConfig(VisualConfig cached) {
+        return cached != null ? cached : defaults();
+    }
+
+    private static VisualConfig readHookCache(Context context) {
+        try {
+            return readHookCache(context.getSharedPreferences(
+                HOOK_CACHE_PREF_NAME,
+                Context.MODE_PRIVATE
+            ));
+        } catch (Throwable t) {
+            logHook("hook config cache read failed: " + t);
+            return null;
+        }
+    }
+
+    static VisualConfig readHookCache(SharedPreferences prefs) {
+        if (!prefs.contains(KEY_HOST_TARGET)) return null;
+        return new VisualConfig(
+            prefs.getInt(KEY_WIDTH_DP, DEFAULT_WIDTH_DP),
+            prefs.getInt(KEY_HEIGHT_DP, DEFAULT_HEIGHT_DP),
+            prefs.getString(KEY_HOST_TARGET, BridgeContract.HOST_TARGET_AUTO),
+            prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true),
+            prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false),
+            prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false)
+        );
+    }
+
+    private static void saveHookCache(Context context, VisualConfig config) {
+        try {
+            saveHookCache(
+                context.getSharedPreferences(HOOK_CACHE_PREF_NAME, Context.MODE_PRIVATE),
+                config
+            );
+        } catch (Throwable t) {
+            logHook("hook config cache write failed: " + t);
+        }
+    }
+
+    static void saveHookCache(SharedPreferences prefs, VisualConfig config) {
+        prefs.edit()
+            .putInt(KEY_WIDTH_DP, config.widthDp)
+            .putInt(KEY_HEIGHT_DP, config.heightDp)
+            .putString(KEY_HOST_TARGET, config.hostTarget)
+            .putBoolean(KEY_SHOW_RECORDING_AREA, config.showRecordingArea)
+            .putBoolean(
+                KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING,
+                config.showWaveformOnlyWhileRecording
+            )
+            .putBoolean(KEY_TAP_TO_TOGGLE_RECORDING, config.tapToToggleRecording)
+            .apply();
     }
 
     private static void logHook(String message) {

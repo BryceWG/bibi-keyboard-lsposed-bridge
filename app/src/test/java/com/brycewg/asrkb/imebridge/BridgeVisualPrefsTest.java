@@ -4,6 +4,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.content.SharedPreferences;
+
+import java.lang.reflect.Proxy;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.junit.Test;
 
 public class BridgeVisualPrefsTest {
@@ -38,6 +44,56 @@ public class BridgeVisualPrefsTest {
         assertFalse(BridgeVisualPrefs.shouldAttachCapture(false, false));
         assertFalse(BridgeVisualPrefs.shouldAttachCapture(true, false));
         assertTrue(BridgeVisualPrefs.shouldAttachCapture(true, true));
+    }
+
+    @Test
+    public void cachedHookConfigRoundTripsAndSurvivesProviderFailure() {
+        BridgeVisualPrefs.VisualConfig cached = new BridgeVisualPrefs.VisualConfig(
+            160,
+            40,
+            BridgeContract.HOST_TARGET_OPEN_SOURCE,
+            false,
+            true,
+            true
+        );
+
+        SharedPreferences prefs = memoryPreferences();
+        BridgeVisualPrefs.saveHookCache(prefs, cached);
+        BridgeVisualPrefs.VisualConfig resolved = BridgeVisualPrefs.fallbackHookConfig(
+            BridgeVisualPrefs.readHookCache(prefs)
+        );
+
+        assertEquals(BridgeContract.HOST_TARGET_OPEN_SOURCE, resolved.hostTarget);
+        assertFalse(resolved.showRecordingArea);
+        assertTrue(resolved.showWaveformOnlyWhileRecording);
+        assertTrue(resolved.tapToToggleRecording);
+    }
+
+    private SharedPreferences memoryPreferences() {
+        Map<String, Object> values = new HashMap<>();
+        SharedPreferences.Editor editor = (SharedPreferences.Editor) Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[] {SharedPreferences.Editor.class},
+            (proxy, method, args) -> {
+                if (method.getName().startsWith("put")) {
+                    values.put((String) args[0], args[1]);
+                    return proxy;
+                }
+                if ("apply".equals(method.getName())) return null;
+                throw new UnsupportedOperationException(method.getName());
+            }
+        );
+        return (SharedPreferences) Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[] {SharedPreferences.class},
+            (proxy, method, args) -> {
+                String name = method.getName();
+                if ("edit".equals(name)) return editor;
+                if ("contains".equals(name)) return values.containsKey(args[0]);
+                if (name.startsWith("get")) return values.getOrDefault(args[0], args[1]);
+                throw new UnsupportedOperationException(name);
+            }
+        );
     }
 
     @Test
