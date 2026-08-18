@@ -12,7 +12,7 @@ final class LongPressCaptureGesture {
         void onLongPressCancel();
     }
 
-    private final long thresholdMs;
+    private long thresholdMs;
     private final float moveSlopPx;
     private final Listener listener;
 
@@ -23,9 +23,13 @@ final class LongPressCaptureGesture {
     private long downTimeMs;
 
     LongPressCaptureGesture(long thresholdMs, float moveSlopPx, Listener listener) {
-        this.thresholdMs = Math.max(1L, thresholdMs);
+        this.thresholdMs = Math.max(0L, thresholdMs);
         this.moveSlopPx = Math.max(0f, moveSlopPx);
         this.listener = listener;
+    }
+
+    void setThresholdMs(long thresholdMs) {
+        this.thresholdMs = Math.max(0L, thresholdMs);
     }
 
     void onDown(float x, float y, long eventTimeMs) {

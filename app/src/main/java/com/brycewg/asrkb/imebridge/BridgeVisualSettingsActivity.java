@@ -34,6 +34,7 @@ public final class BridgeVisualSettingsActivity extends Activity {
     private BridgeVisualPrefs.VisualConfig visualConfig;
     private TextView widthValue;
     private TextView heightValue;
+    private TextView triggerDelayValue;
     private TextView languageValue;
     private TextView hostTargetValue;
     private Switch showRecordingAreaSwitch;
@@ -43,6 +44,7 @@ public final class BridgeVisualSettingsActivity extends Activity {
     private BridgeWaveformPreviewView recordingPreview;
     private SeekBar widthSeekBar;
     private SeekBar heightSeekBar;
+    private SeekBar triggerDelaySeekBar;
     private boolean explainedHostTarget;
     private boolean explainedShowRecordingArea;
     private boolean explainedRecordingOnlyWaveform;
@@ -479,6 +481,29 @@ public final class BridgeVisualSettingsActivity extends Activity {
         hintParams.topMargin = dp(8);
         card.addView(hint, hintParams);
 
+        triggerDelayValue = valueBadge();
+        LinearLayout.LayoutParams delayHeaderParams = matchWrap();
+        delayHeaderParams.topMargin = dp(22);
+        card.addView(createSliderHeader(R.string.bridge_visual_trigger_delay_label, triggerDelayValue), delayHeaderParams);
+        triggerDelaySeekBar = createSeekBar(
+            BridgeVisualPrefs.MAX_TRIGGER_DELAY_MS - BridgeVisualPrefs.MIN_TRIGGER_DELAY_MS,
+            visualConfig.triggerDelayMs - BridgeVisualPrefs.MIN_TRIGGER_DELAY_MS,
+            (progress) -> applyConfig(
+                visualConfig.withTriggerDelayMs(
+                    BridgeVisualPrefs.MIN_TRIGGER_DELAY_MS + progress
+                ),
+                true
+            )
+        );
+        LinearLayout.LayoutParams delaySeekParams = matchWrap();
+        delaySeekParams.topMargin = dp(4);
+        card.addView(triggerDelaySeekBar, delaySeekParams);
+        TextView delayHint = secondaryText(R.string.bridge_visual_trigger_delay_hint);
+        delayHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        LinearLayout.LayoutParams delayHintParams = matchWrap();
+        delayHintParams.topMargin = dp(8);
+        card.addView(delayHint, delayHintParams);
+
         updateLabels();
         return card;
     }
@@ -761,6 +786,11 @@ public final class BridgeVisualSettingsActivity extends Activity {
         if (heightSeekBar != null) {
             heightSeekBar.setProgress(config.heightDp - BridgeVisualPrefs.MIN_HEIGHT_DP);
         }
+        if (triggerDelaySeekBar != null) {
+            triggerDelaySeekBar.setProgress(
+                config.triggerDelayMs - BridgeVisualPrefs.MIN_TRIGGER_DELAY_MS
+            );
+        }
         if (hostTargetValue != null) {
             hostTargetValue.setText(labelForHostTarget(config.hostTarget));
         }
@@ -795,6 +825,11 @@ public final class BridgeVisualSettingsActivity extends Activity {
         }
         if (heightValue != null) {
             heightValue.setText(getString(R.string.bridge_visual_dp_value, visualConfig.heightDp));
+        }
+        if (triggerDelayValue != null) {
+            triggerDelayValue.setText(
+                getString(R.string.bridge_visual_trigger_delay_value, visualConfig.triggerDelayMs)
+            );
         }
     }
 

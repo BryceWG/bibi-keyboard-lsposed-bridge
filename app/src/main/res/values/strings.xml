@@ -12,6 +12,9 @@
     <string name="bridge_visual_height_label">Height</string>
     <string name="bridge_visual_dp_value">%1$d dp</string>
     <string name="bridge_visual_height_hint">Also lifts the strip from the bottom edge</string>
+    <string name="bridge_visual_trigger_delay_label">Trigger delay</string>
+    <string name="bridge_visual_trigger_delay_value">%1$d ms</string>
+    <string name="bridge_visual_trigger_delay_hint">At 0 ms, trigger immediately. Above 0 ms, short taps pass through to the keyboard and holding this long captures the gesture.</string>
     <string name="bridge_visual_restore_defaults">Restore defaults</string>
     <string name="bridge_docs_title">Setup guide &amp; docs</string>
     <string name="bridge_docs_summary">Open the IME Bridge introduction, install steps, and troubleshooting guide</string>

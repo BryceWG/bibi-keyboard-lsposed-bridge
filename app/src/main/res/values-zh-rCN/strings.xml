@@ -12,6 +12,9 @@
     <string name="bridge_visual_height_label">高度</string>
     <string name="bridge_visual_dp_value">%1$d dp</string>
     <string name="bridge_visual_height_hint">同时会将条带从底边上移</string>
+    <string name="bridge_visual_trigger_delay_label">触发延迟</string>
+    <string name="bridge_visual_trigger_delay_value">%1$d 毫秒</string>
+    <string name="bridge_visual_trigger_delay_hint">设为 0 毫秒时立即触发；大于 0 时，短按会透传给输入法，停留达到此时长后才触发录音并拦截按键。</string>
     <string name="bridge_visual_restore_defaults">恢复默认</string>
     <string name="bridge_docs_title">介绍与使用文档</string>
     <string name="bridge_docs_summary">查看模块说明、安装步骤与故障排除</string>

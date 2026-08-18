@@ -16,6 +16,9 @@ final class BridgeVisualPrefs {
     static final int MIN_HEIGHT_DP = 24;
     static final int MAX_HEIGHT_DP = 72;
     static final int DEFAULT_HEIGHT_DP = 32;
+    static final int MIN_TRIGGER_DELAY_MS = 0;
+    static final int MAX_TRIGGER_DELAY_MS = 1000;
+    static final int DEFAULT_TRIGGER_DELAY_MS = 0;
     private static final int BASE_BOTTOM_MARGIN_DP = 8;
 
     private static final String TAG = "BiBiImeBridge";
@@ -27,6 +30,7 @@ final class BridgeVisualPrefs {
     static final String KEY_SHOW_RECORDING_AREA = "show_recording_area";
     static final String KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING = "show_waveform_only_while_recording";
     static final String KEY_TAP_TO_TOGGLE_RECORDING = "tap_to_toggle_recording";
+    static final String KEY_TRIGGER_DELAY_MS = "trigger_delay_ms";
 
     private BridgeVisualPrefs() {
     }
@@ -38,7 +42,8 @@ final class BridgeVisualPrefs {
             BridgeContract.HOST_TARGET_AUTO,
             true,
             false,
-            false
+            false,
+            DEFAULT_TRIGGER_DELAY_MS
         );
     }
 
@@ -56,7 +61,8 @@ final class BridgeVisualPrefs {
             prefs.getString(KEY_HOST_TARGET, BridgeContract.HOST_TARGET_AUTO),
             prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true),
             prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false),
-            prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false)
+            prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false),
+            prefs.getInt(KEY_TRIGGER_DELAY_MS, DEFAULT_TRIGGER_DELAY_MS)
         );
     }
 
@@ -73,6 +79,7 @@ final class BridgeVisualPrefs {
                 config.showWaveformOnlyWhileRecording
             )
             .putBoolean(KEY_TAP_TO_TOGGLE_RECORDING, config.tapToToggleRecording)
+            .putInt(KEY_TRIGGER_DELAY_MS, config.triggerDelayMs)
             .apply();
     }
 
@@ -128,7 +135,8 @@ final class BridgeVisualPrefs {
             prefs.getString(KEY_HOST_TARGET, BridgeContract.HOST_TARGET_AUTO),
             prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true),
             prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false),
-            prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false)
+            prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false),
+            prefs.getInt(KEY_TRIGGER_DELAY_MS, DEFAULT_TRIGGER_DELAY_MS)
         );
     }
 
@@ -154,6 +162,7 @@ final class BridgeVisualPrefs {
                 config.showWaveformOnlyWhileRecording
             )
             .putBoolean(KEY_TAP_TO_TOGGLE_RECORDING, config.tapToToggleRecording)
+            .putInt(KEY_TRIGGER_DELAY_MS, config.triggerDelayMs)
             .apply();
     }
 
@@ -179,6 +188,12 @@ final class BridgeVisualPrefs {
         return value;
     }
 
+    static int clampTriggerDelayMs(int value) {
+        if (value < MIN_TRIGGER_DELAY_MS) return MIN_TRIGGER_DELAY_MS;
+        if (value > MAX_TRIGGER_DELAY_MS) return MAX_TRIGGER_DELAY_MS;
+        return value;
+    }
+
     static int bottomMarginDp(VisualConfig config) {
         if (config == null) return BASE_BOTTOM_MARGIN_DP;
         int extra = Math.round((clampHeightDp(config.heightDp) - MIN_HEIGHT_DP) * 0.65f);
@@ -192,9 +207,29 @@ final class BridgeVisualPrefs {
         final boolean showRecordingArea;
         final boolean showWaveformOnlyWhileRecording;
         final boolean tapToToggleRecording;
+        final int triggerDelayMs;
 
         VisualConfig(int widthDp, int heightDp) {
-            this(widthDp, heightDp, BridgeContract.HOST_TARGET_AUTO, true, false, false);
+            this(widthDp, heightDp, BridgeContract.HOST_TARGET_AUTO, true, false, false,
+                DEFAULT_TRIGGER_DELAY_MS);
+        }
+
+        VisualConfig(
+            int widthDp,
+            int heightDp,
+            String hostTarget,
+            boolean showRecordingArea,
+            boolean showWaveformOnlyWhileRecording,
+            boolean tapToToggleRecording,
+            int triggerDelayMs
+        ) {
+            this.widthDp = clampWidthDp(widthDp);
+            this.heightDp = clampHeightDp(heightDp);
+            this.hostTarget = BridgeContract.normalizeHostTarget(hostTarget);
+            this.showRecordingArea = showRecordingArea;
+            this.showWaveformOnlyWhileRecording = showWaveformOnlyWhileRecording;
+            this.tapToToggleRecording = tapToToggleRecording;
+            this.triggerDelayMs = clampTriggerDelayMs(triggerDelayMs);
         }
 
         VisualConfig(
@@ -205,12 +240,15 @@ final class BridgeVisualPrefs {
             boolean showWaveformOnlyWhileRecording,
             boolean tapToToggleRecording
         ) {
-            this.widthDp = clampWidthDp(widthDp);
-            this.heightDp = clampHeightDp(heightDp);
-            this.hostTarget = BridgeContract.normalizeHostTarget(hostTarget);
-            this.showRecordingArea = showRecordingArea;
-            this.showWaveformOnlyWhileRecording = showWaveformOnlyWhileRecording;
-            this.tapToToggleRecording = tapToToggleRecording;
+            this(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                DEFAULT_TRIGGER_DELAY_MS
+            );
         }
 
         VisualConfig withSize(int widthDp, int heightDp) {
@@ -220,7 +258,8 @@ final class BridgeVisualPrefs {
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
-                tapToToggleRecording
+                tapToToggleRecording,
+                triggerDelayMs
             );
         }
 
@@ -231,7 +270,8 @@ final class BridgeVisualPrefs {
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
-                tapToToggleRecording
+                tapToToggleRecording,
+                triggerDelayMs
             );
         }
 
@@ -242,7 +282,8 @@ final class BridgeVisualPrefs {
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
-                tapToToggleRecording
+                tapToToggleRecording,
+                triggerDelayMs
             );
         }
 
@@ -253,7 +294,8 @@ final class BridgeVisualPrefs {
                 hostTarget,
                 showRecordingArea,
                 enabled,
-                tapToToggleRecording
+                tapToToggleRecording,
+                triggerDelayMs
             );
         }
 
@@ -264,7 +306,20 @@ final class BridgeVisualPrefs {
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
-                enabled
+                enabled,
+                triggerDelayMs
+            );
+        }
+
+        VisualConfig withTriggerDelayMs(int delayMs) {
+            return new VisualConfig(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                delayMs
             );
         }
     }

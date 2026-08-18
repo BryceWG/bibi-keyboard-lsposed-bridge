@@ -34,6 +34,10 @@ final class TapCaptureGesture {
         return tapped;
     }
 
+    boolean isPending() {
+        return pending;
+    }
+
     void cancel() {
         pending = false;
         downX = 0f;

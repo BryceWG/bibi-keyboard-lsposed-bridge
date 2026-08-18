@@ -28,6 +28,7 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
         BridgeVisualPrefs.KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING;
     public static final String COLUMN_TAP_TO_TOGGLE_RECORDING =
         BridgeVisualPrefs.KEY_TAP_TO_TOGGLE_RECORDING;
+    public static final String COLUMN_TRIGGER_DELAY_MS = BridgeVisualPrefs.KEY_TRIGGER_DELAY_MS;
     public static final String COLUMN_MODULE_VERSION = "module_version";
 
     private static final int CODE_CONFIG = 1;
@@ -59,6 +60,7 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             COLUMN_SHOW_RECORDING_AREA,
             COLUMN_SHOW_WAVEFORM_ONLY_WHILE_RECORDING,
             COLUMN_TAP_TO_TOGGLE_RECORDING,
+            COLUMN_TRIGGER_DELAY_MS,
             COLUMN_MODULE_VERSION
         });
         cursor.addRow(new Object[] {
@@ -68,6 +70,7 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             config.showRecordingArea ? 1 : 0,
             config.showWaveformOnlyWhileRecording ? 1 : 0,
             config.tapToToggleRecording ? 1 : 0,
+            config.triggerDelayMs,
             BridgeContract.MODULE_VERSION
         });
         return cursor;
@@ -106,13 +109,17 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
         boolean tapToToggle = cursor.getInt(
             cursor.getColumnIndexOrThrow(COLUMN_TAP_TO_TOGGLE_RECORDING)
         ) != 0;
+        int triggerDelayMs = cursor.getInt(
+            cursor.getColumnIndexOrThrow(COLUMN_TRIGGER_DELAY_MS)
+        );
         return new BridgeVisualPrefs.VisualConfig(
             width,
             height,
             host,
             show,
             recordingOnly,
-            tapToToggle
+            tapToToggle,
+            triggerDelayMs
         );
     }
 }
