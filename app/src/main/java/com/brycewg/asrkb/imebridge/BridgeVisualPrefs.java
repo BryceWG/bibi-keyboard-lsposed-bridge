@@ -31,6 +31,9 @@ final class BridgeVisualPrefs {
     static final String KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING = "show_waveform_only_while_recording";
     static final String KEY_TAP_TO_TOGGLE_RECORDING = "tap_to_toggle_recording";
     static final String KEY_TRIGGER_DELAY_MS = "trigger_delay_ms";
+    static final String KEY_LONG_PRESS_SWITCH_IME = "long_press_switch_ime";
+    static final String KEY_SWITCH_IME_TARGET_ID = "switch_ime_target_id";
+    static final String KEY_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH = "hide_idle_waveform_in_ime_switch";
 
     private BridgeVisualPrefs() {
     }
@@ -62,7 +65,10 @@ final class BridgeVisualPrefs {
             prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true),
             prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false),
             prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false),
-            prefs.getInt(KEY_TRIGGER_DELAY_MS, DEFAULT_TRIGGER_DELAY_MS)
+            prefs.getInt(KEY_TRIGGER_DELAY_MS, DEFAULT_TRIGGER_DELAY_MS),
+            prefs.getBoolean(KEY_LONG_PRESS_SWITCH_IME, false),
+            prefs.getString(KEY_SWITCH_IME_TARGET_ID, ""),
+            prefs.getBoolean(KEY_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH, false)
         );
     }
 
@@ -80,6 +86,9 @@ final class BridgeVisualPrefs {
             )
             .putBoolean(KEY_TAP_TO_TOGGLE_RECORDING, config.tapToToggleRecording)
             .putInt(KEY_TRIGGER_DELAY_MS, config.triggerDelayMs)
+            .putBoolean(KEY_LONG_PRESS_SWITCH_IME, config.longPressSwitchIme)
+            .putString(KEY_SWITCH_IME_TARGET_ID, config.switchImeTargetId)
+            .putBoolean(KEY_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH, config.hideIdleWaveformInImeSwitch)
             .apply();
     }
 
@@ -136,7 +145,10 @@ final class BridgeVisualPrefs {
             prefs.getBoolean(KEY_SHOW_RECORDING_AREA, true),
             prefs.getBoolean(KEY_SHOW_WAVEFORM_ONLY_WHILE_RECORDING, false),
             prefs.getBoolean(KEY_TAP_TO_TOGGLE_RECORDING, false),
-            prefs.getInt(KEY_TRIGGER_DELAY_MS, DEFAULT_TRIGGER_DELAY_MS)
+            prefs.getInt(KEY_TRIGGER_DELAY_MS, DEFAULT_TRIGGER_DELAY_MS),
+            prefs.getBoolean(KEY_LONG_PRESS_SWITCH_IME, false),
+            prefs.getString(KEY_SWITCH_IME_TARGET_ID, ""),
+            prefs.getBoolean(KEY_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH, false)
         );
     }
 
@@ -163,6 +175,9 @@ final class BridgeVisualPrefs {
             )
             .putBoolean(KEY_TAP_TO_TOGGLE_RECORDING, config.tapToToggleRecording)
             .putInt(KEY_TRIGGER_DELAY_MS, config.triggerDelayMs)
+            .putBoolean(KEY_LONG_PRESS_SWITCH_IME, config.longPressSwitchIme)
+            .putString(KEY_SWITCH_IME_TARGET_ID, config.switchImeTargetId)
+            .putBoolean(KEY_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH, config.hideIdleWaveformInImeSwitch)
             .apply();
     }
 
@@ -200,6 +215,10 @@ final class BridgeVisualPrefs {
         return BASE_BOTTOM_MARGIN_DP + extra;
     }
 
+    static String normalizeSwitchImeTargetId(String value) {
+        return value == null ? "" : value.trim();
+    }
+
     static final class VisualConfig {
         final int widthDp;
         final int heightDp;
@@ -208,10 +227,13 @@ final class BridgeVisualPrefs {
         final boolean showWaveformOnlyWhileRecording;
         final boolean tapToToggleRecording;
         final int triggerDelayMs;
+        final boolean longPressSwitchIme;
+        final String switchImeTargetId;
+        final boolean hideIdleWaveformInImeSwitch;
 
         VisualConfig(int widthDp, int heightDp) {
             this(widthDp, heightDp, BridgeContract.HOST_TARGET_AUTO, true, false, false,
-                DEFAULT_TRIGGER_DELAY_MS);
+                DEFAULT_TRIGGER_DELAY_MS, false, "", false);
         }
 
         VisualConfig(
@@ -223,13 +245,18 @@ final class BridgeVisualPrefs {
             boolean tapToToggleRecording,
             int triggerDelayMs
         ) {
-            this.widthDp = clampWidthDp(widthDp);
-            this.heightDp = clampHeightDp(heightDp);
-            this.hostTarget = BridgeContract.normalizeHostTarget(hostTarget);
-            this.showRecordingArea = showRecordingArea;
-            this.showWaveformOnlyWhileRecording = showWaveformOnlyWhileRecording;
-            this.tapToToggleRecording = tapToToggleRecording;
-            this.triggerDelayMs = clampTriggerDelayMs(triggerDelayMs);
+            this(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                triggerDelayMs,
+                false,
+                "",
+                false
+            );
         }
 
         VisualConfig(
@@ -247,71 +274,223 @@ final class BridgeVisualPrefs {
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
                 tapToToggleRecording,
-                DEFAULT_TRIGGER_DELAY_MS
+                DEFAULT_TRIGGER_DELAY_MS,
+                false,
+                "",
+                false
             );
         }
 
-        VisualConfig withSize(int widthDp, int heightDp) {
-            return new VisualConfig(
+        VisualConfig(
+            int widthDp,
+            int heightDp,
+            String hostTarget,
+            boolean showRecordingArea,
+            boolean showWaveformOnlyWhileRecording,
+            boolean tapToToggleRecording,
+            int triggerDelayMs,
+            boolean longPressSwitchIme,
+            String switchImeTargetId
+        ) {
+            this(
                 widthDp,
                 heightDp,
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
                 tapToToggleRecording,
-                triggerDelayMs
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                false
+            );
+        }
+
+        VisualConfig(
+            int widthDp,
+            int heightDp,
+            String hostTarget,
+            boolean showRecordingArea,
+            boolean showWaveformOnlyWhileRecording,
+            boolean tapToToggleRecording,
+            int triggerDelayMs,
+            boolean longPressSwitchIme,
+            String switchImeTargetId,
+            boolean hideIdleWaveformInImeSwitch
+        ) {
+            this.widthDp = clampWidthDp(widthDp);
+            this.heightDp = clampHeightDp(heightDp);
+            this.hostTarget = BridgeContract.normalizeHostTarget(hostTarget);
+            this.showRecordingArea = showRecordingArea;
+            this.showWaveformOnlyWhileRecording = showWaveformOnlyWhileRecording;
+            this.tapToToggleRecording = tapToToggleRecording;
+            this.triggerDelayMs = clampTriggerDelayMs(triggerDelayMs);
+            this.longPressSwitchIme = longPressSwitchIme;
+            this.switchImeTargetId = normalizeSwitchImeTargetId(switchImeTargetId);
+            this.hideIdleWaveformInImeSwitch = hideIdleWaveformInImeSwitch;
+        }
+
+        boolean isImeSwitchMode() {
+            return showRecordingArea && longPressSwitchIme;
+        }
+
+        boolean recordingGesturesEnabled() {
+            return showRecordingArea && !longPressSwitchIme;
+        }
+
+        boolean hideIdleWaveform() {
+            return isImeSwitchMode()
+                ? hideIdleWaveformInImeSwitch
+                : showWaveformOnlyWhileRecording;
+        }
+
+        VisualConfig withSize(int widthDp, int heightDp) {
+            return copy(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
             );
         }
 
         VisualConfig withHostTarget(String hostTarget) {
-            return new VisualConfig(
+            return copy(
                 widthDp,
                 heightDp,
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
                 tapToToggleRecording,
-                triggerDelayMs
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
             );
         }
 
         VisualConfig withShowRecordingArea(boolean showRecordingArea) {
-            return new VisualConfig(
+            return copy(
                 widthDp,
                 heightDp,
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
                 tapToToggleRecording,
-                triggerDelayMs
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
             );
         }
 
         VisualConfig withShowWaveformOnlyWhileRecording(boolean enabled) {
-            return new VisualConfig(
+            return copy(
                 widthDp,
                 heightDp,
                 hostTarget,
                 showRecordingArea,
                 enabled,
                 tapToToggleRecording,
-                triggerDelayMs
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
             );
         }
 
         VisualConfig withTapToToggleRecording(boolean enabled) {
-            return new VisualConfig(
+            return copy(
                 widthDp,
                 heightDp,
                 hostTarget,
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
                 enabled,
-                triggerDelayMs
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
             );
         }
 
         VisualConfig withTriggerDelayMs(int delayMs) {
+            return copy(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                delayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
+            );
+        }
+
+        VisualConfig withLongPressSwitchIme(boolean enabled) {
+            return copy(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                triggerDelayMs,
+                enabled,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
+            );
+        }
+
+        VisualConfig withSwitchImeTargetId(String switchImeTargetId) {
+            return copy(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
+            );
+        }
+
+        VisualConfig withHideIdleWaveformInImeSwitch(boolean enabled) {
+            return copy(
+                widthDp,
+                heightDp,
+                hostTarget,
+                showRecordingArea,
+                showWaveformOnlyWhileRecording,
+                tapToToggleRecording,
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                enabled
+            );
+        }
+
+        private VisualConfig copy(
+            int widthDp,
+            int heightDp,
+            String hostTarget,
+            boolean showRecordingArea,
+            boolean showWaveformOnlyWhileRecording,
+            boolean tapToToggleRecording,
+            int triggerDelayMs,
+            boolean longPressSwitchIme,
+            String switchImeTargetId,
+            boolean hideIdleWaveformInImeSwitch
+        ) {
             return new VisualConfig(
                 widthDp,
                 heightDp,
@@ -319,7 +498,10 @@ final class BridgeVisualPrefs {
                 showRecordingArea,
                 showWaveformOnlyWhileRecording,
                 tapToToggleRecording,
-                delayMs
+                triggerDelayMs,
+                longPressSwitchIme,
+                switchImeTargetId,
+                hideIdleWaveformInImeSwitch
             );
         }
     }

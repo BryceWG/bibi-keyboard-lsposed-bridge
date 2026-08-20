@@ -6,7 +6,7 @@
 
 **Standalone LSPosed / LSPatch bridge module for BiBi Keyboard**
 
-Lets the floating ball preview and insert recognition text through the current third-party keyboard, and optionally adds hold-to-record at the bottom of a compatible IME.
+Lets the floating ball preview and insert recognition text through the current third-party keyboard, and optionally adds hold-to-record or long-press IME switching at the bottom of a compatible IME.
 
 [简体中文](README.md) | English
 
@@ -28,7 +28,8 @@ Lets the floating ball preview and insert recognition text through the current t
 | Floating-ball text insertion | The current third-party IME commits final recognition text directly |
 | Streaming preview | Displays partial results as composing text when supported and cleans them up on finish/cancel |
 | Keyboard visibility | Reports IME panel visibility without relying only on Accessibility detection |
-| In-IME recording | Hold the bridge area at the bottom of a third-party keyboard and release to send audio to BiBi Keyboard |
+| In-IME recording | Hold the touch area at the bottom of a third-party keyboard and release to send audio to BiBi Keyboard |
+| Long-press IME switch | Optionally use that same touch area to switch to another enabled input method instead of recording |
 | Privileged clipboard R/W | Reads/writes the system clipboard inside the target IME process so SyncClipboard can work outside BiBi’s own keyboard |
 | Input-field context | Pro: provides cursor-adjacent text to AI post-processing when the related option is enabled |
 

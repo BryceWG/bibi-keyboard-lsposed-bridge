@@ -54,6 +54,8 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 private enum class ActiveOverlay {
     ExplainHostTarget,
     ExplainShowRecordingArea,
+    ExplainLongPressSwitchIme,
+    ExplainHideIdleWaveformInImeSwitch,
     ExplainRecordingOnlyWaveform,
     ExplainTapToToggle,
 }
@@ -83,6 +85,8 @@ private fun BridgeVisualSettingsScreen(activity: Activity) {
     var activeOverlay by remember { mutableStateOf<ActiveOverlay?>(null) }
     var explainedHostTarget by remember { mutableStateOf(false) }
     var explainedShowRecordingArea by remember { mutableStateOf(false) }
+    var explainedLongPressSwitchIme by remember { mutableStateOf(false) }
+    var explainedHideIdleWaveformInImeSwitch by remember { mutableStateOf(false) }
     var explainedRecordingOnlyWaveform by remember { mutableStateOf(false) }
     var explainedTapToToggleRecording by remember { mutableStateOf(false) }
     var pendingChecked by remember { mutableStateOf<Boolean?>(null) }
@@ -94,6 +98,13 @@ private fun BridgeVisualSettingsScreen(activity: Activity) {
     val selectedLanguageIndex = languageTags.indexOf(currentLanguageTag).coerceAtLeast(0)
     val hostTargetLabels = HostTargets.map { target -> hostTargetLabel(target) }
     val selectedHostIndex = HostTargets.indexOf(visualConfig.hostTarget).coerceAtLeast(0)
+    val imeOptions = remember(context, visualConfig.switchImeTargetId) {
+        loadImeOptions(context, visualConfig.switchImeTargetId)
+    }
+    val selectedImeIndex = imeOptions.indexOfFirst { option ->
+        option.id == visualConfig.switchImeTargetId
+    }.coerceAtLeast(0)
+    val imeLabels = imeOptions.map { option -> option.label }
     val docsOpenFailed = stringResource(R.string.bridge_docs_open_failed)
     val docsUrl = stringResource(R.string.bridge_docs_url)
 
@@ -185,32 +196,81 @@ private fun BridgeVisualSettingsScreen(activity: Activity) {
                                 }
                             },
                         )
-                        SwitchPreference(
-                            title = stringResource(R.string.bridge_recording_only_waveform_title),
-                            summary = stringResource(R.string.bridge_recording_only_waveform_summary),
-                            checked = visualConfig.showWaveformOnlyWhileRecording,
-                            onCheckedChange = { requested ->
-                                if (explainedRecordingOnlyWaveform) {
-                                    saveConfig(visualConfig.withShowWaveformOnlyWhileRecording(requested))
-                                } else {
-                                    pendingChecked = requested
-                                    activeOverlay = ActiveOverlay.ExplainRecordingOnlyWaveform
-                                }
-                            },
-                        )
-                        SwitchPreference(
-                            title = stringResource(R.string.bridge_tap_to_toggle_recording_title),
-                            summary = stringResource(R.string.bridge_tap_to_toggle_recording_summary),
-                            checked = visualConfig.tapToToggleRecording,
-                            onCheckedChange = { requested ->
-                                if (explainedTapToToggleRecording) {
-                                    saveConfig(visualConfig.withTapToToggleRecording(requested))
-                                } else {
-                                    pendingChecked = requested
-                                    activeOverlay = ActiveOverlay.ExplainTapToToggle
-                                }
-                            },
-                        )
+                        if (visualConfig.showRecordingArea) {
+                            SwitchPreference(
+                                title = stringResource(R.string.bridge_long_press_switch_ime_title),
+                                summary = stringResource(R.string.bridge_long_press_switch_ime_summary),
+                                checked = visualConfig.longPressSwitchIme,
+                                onCheckedChange = { requested ->
+                                    if (explainedLongPressSwitchIme) {
+                                        saveConfig(visualConfig.withLongPressSwitchIme(requested))
+                                    } else {
+                                        pendingChecked = requested
+                                        activeOverlay = ActiveOverlay.ExplainLongPressSwitchIme
+                                    }
+                                },
+                            )
+                            if (visualConfig.longPressSwitchIme) {
+                                OverlayDropdownPreference(
+                                    title = stringResource(R.string.bridge_switch_ime_target_title),
+                                    summary = stringResource(R.string.bridge_switch_ime_target_summary),
+                                    items = imeLabels,
+                                    selectedIndex = selectedImeIndex,
+                                    onSelectedIndexChange = { index ->
+                                        val selected = imeOptions.getOrNull(index)
+                                            ?: return@OverlayDropdownPreference
+                                        if (selected.id == visualConfig.switchImeTargetId) {
+                                            return@OverlayDropdownPreference
+                                        }
+                                        saveConfig(visualConfig.withSwitchImeTargetId(selected.id))
+                                    },
+                                )
+                                SwitchPreference(
+                                    title = stringResource(R.string.bridge_hide_idle_waveform_ime_switch_title),
+                                    summary = stringResource(R.string.bridge_hide_idle_waveform_ime_switch_summary),
+                                    checked = visualConfig.hideIdleWaveformInImeSwitch,
+                                    onCheckedChange = { requested ->
+                                        if (explainedHideIdleWaveformInImeSwitch) {
+                                            saveConfig(
+                                                visualConfig.withHideIdleWaveformInImeSwitch(requested),
+                                            )
+                                        } else {
+                                            pendingChecked = requested
+                                            activeOverlay = ActiveOverlay.ExplainHideIdleWaveformInImeSwitch
+                                        }
+                                    },
+                                )
+                            } else {
+                                SwitchPreference(
+                                    title = stringResource(R.string.bridge_recording_only_waveform_title),
+                                    summary = stringResource(R.string.bridge_recording_only_waveform_summary),
+                                    checked = visualConfig.showWaveformOnlyWhileRecording,
+                                    onCheckedChange = { requested ->
+                                        if (explainedRecordingOnlyWaveform) {
+                                            saveConfig(
+                                                visualConfig.withShowWaveformOnlyWhileRecording(requested),
+                                            )
+                                        } else {
+                                            pendingChecked = requested
+                                            activeOverlay = ActiveOverlay.ExplainRecordingOnlyWaveform
+                                        }
+                                    },
+                                )
+                                SwitchPreference(
+                                    title = stringResource(R.string.bridge_tap_to_toggle_recording_title),
+                                    summary = stringResource(R.string.bridge_tap_to_toggle_recording_summary),
+                                    checked = visualConfig.tapToToggleRecording,
+                                    onCheckedChange = { requested ->
+                                        if (explainedTapToToggleRecording) {
+                                            saveConfig(visualConfig.withTapToToggleRecording(requested))
+                                        } else {
+                                            pendingChecked = requested
+                                            activeOverlay = ActiveOverlay.ExplainTapToToggle
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
                 item(key = "preview") {
@@ -231,19 +291,21 @@ private fun BridgeVisualSettingsScreen(activity: Activity) {
                                 .fillMaxWidth()
                                 .padding(top = 8.dp),
                         )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
-                        Text(
-                            text = stringResource(R.string.bridge_visual_preview_recording),
-                            color = MiuixTheme.colorScheme.primary,
-                            style = MiuixTheme.textStyles.footnote1,
-                        )
-                        WaveformPreview(
-                            recording = true,
-                            visualConfig = visualConfig,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                        )
+                        if (!visualConfig.isImeSwitchMode()) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
+                            Text(
+                                text = stringResource(R.string.bridge_visual_preview_recording),
+                                color = MiuixTheme.colorScheme.primary,
+                                style = MiuixTheme.textStyles.footnote1,
+                            )
+                            WaveformPreview(
+                                recording = true,
+                                visualConfig = visualConfig,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp),
+                            )
+                        }
                     }
                 }
                 item(key = "summary") {
@@ -345,6 +407,20 @@ private fun BridgeVisualSettingsScreen(activity: Activity) {
                             pendingChecked = null
                             activeOverlay = null
                         }
+                        ActiveOverlay.ExplainLongPressSwitchIme -> {
+                            explainedLongPressSwitchIme = true
+                            pendingChecked?.let { saveConfig(visualConfig.withLongPressSwitchIme(it)) }
+                            pendingChecked = null
+                            activeOverlay = null
+                        }
+                        ActiveOverlay.ExplainHideIdleWaveformInImeSwitch -> {
+                            explainedHideIdleWaveformInImeSwitch = true
+                            pendingChecked?.let {
+                                saveConfig(visualConfig.withHideIdleWaveformInImeSwitch(it))
+                            }
+                            pendingChecked = null
+                            activeOverlay = null
+                        }
                         ActiveOverlay.ExplainRecordingOnlyWaveform -> {
                             explainedRecordingOnlyWaveform = true
                             pendingChecked?.let {
@@ -414,6 +490,16 @@ private fun explanationCopy(activeOverlay: ActiveOverlay?): Pair<String, String>
             offRes = R.string.feature_bridge_show_recording_area_off_desc
             onRes = R.string.feature_bridge_show_recording_area_on_desc
         }
+        ActiveOverlay.ExplainLongPressSwitchIme -> {
+            titleRes = R.string.bridge_long_press_switch_ime_title
+            offRes = R.string.feature_bridge_long_press_switch_ime_off_desc
+            onRes = R.string.feature_bridge_long_press_switch_ime_on_desc
+        }
+        ActiveOverlay.ExplainHideIdleWaveformInImeSwitch -> {
+            titleRes = R.string.bridge_hide_idle_waveform_ime_switch_title
+            offRes = R.string.feature_bridge_hide_idle_waveform_ime_switch_off_desc
+            onRes = R.string.feature_bridge_hide_idle_waveform_ime_switch_on_desc
+        }
         ActiveOverlay.ExplainRecordingOnlyWaveform -> {
             titleRes = R.string.bridge_recording_only_waveform_title
             offRes = R.string.feature_bridge_recording_only_waveform_off_desc
@@ -463,4 +549,22 @@ private fun hostTargetLabel(hostTarget: String): String {
 
 private fun Modifier.settingsCard(): Modifier {
     return padding(horizontal = 12.dp).padding(bottom = 12.dp)
+}
+
+private data class ImeOption(val id: String, val label: String)
+
+private fun loadImeOptions(
+    context: android.content.Context,
+    selectedId: String,
+): List<ImeOption> {
+    val noneLabel = context.getString(R.string.bridge_switch_ime_target_none)
+    val options = mutableListOf(ImeOption("", noneLabel))
+    BridgeImeSwitcher.enabledOptions(context).forEach { option ->
+        if (option.id.isEmpty()) return@forEach
+        options += ImeOption(option.id, option.label.ifBlank { option.id })
+    }
+    if (selectedId.isNotEmpty() && options.none { option -> option.id == selectedId }) {
+        options.add(1, ImeOption(selectedId, selectedId))
+    }
+    return options
 }

@@ -24,6 +24,7 @@ final class BottomCaptureStripView extends View {
         void onCaptureHoldStarted();
         void onCaptureHoldReleased();
         void onCaptureHoldCancelled();
+        void onImeSwitchRequested();
     }
 
     static final int HEIGHT_DP = 32;
@@ -45,7 +46,7 @@ final class BottomCaptureStripView extends View {
     private final Runnable longPressRunnable = new Runnable() {
         @Override
         public void run() {
-            if (tapToToggleRecording) {
+            if (tapToToggleRecording && !imeSwitchMode) {
                 if (pendingTapAction != TAP_ACTION_NONE && tapGesture.isPending()) {
                     dispatchTapAction(pendingTapAction);
                     delayedTapTriggered = true;
@@ -60,6 +61,7 @@ final class BottomCaptureStripView extends View {
     private BridgeCaptureStatus captureStatus = BridgeCaptureStatus.ready("attached");
     private boolean showWaveformOnlyWhileRecording;
     private boolean tapToToggleRecording;
+    private boolean imeSwitchMode;
     private int pendingTapAction = TAP_ACTION_NONE;
     private boolean delayedTapTriggered;
     private long downTimeMs;
@@ -78,16 +80,22 @@ final class BottomCaptureStripView extends View {
             new LongPressCaptureGesture.Listener() {
                 @Override
                 public void onLongPressStart() {
+                    if (imeSwitchMode) {
+                        if (listener != null) listener.onImeSwitchRequested();
+                        return;
+                    }
                     if (listener != null) listener.onCaptureHoldStarted();
                 }
 
                 @Override
                 public void onLongPressRelease() {
+                    if (imeSwitchMode) return;
                     if (listener != null) listener.onCaptureHoldReleased();
                 }
 
                 @Override
                 public void onLongPressCancel() {
+                    if (imeSwitchMode) return;
                     if (listener != null) listener.onCaptureHoldCancelled();
                 }
             }
@@ -112,17 +120,27 @@ final class BottomCaptureStripView extends View {
 
     void setTapToToggleRecording(boolean enabled) {
         if (tapToToggleRecording == enabled) return;
-        mainHandler.removeCallbacks(longPressRunnable);
-        gesture.onCancel();
-        tapGesture.cancel();
-        pendingTapAction = TAP_ACTION_NONE;
-        delayedTapTriggered = false;
+        resetPendingGestures();
         tapToToggleRecording = enabled;
+    }
+
+    void setImeSwitchMode(boolean enabled) {
+        if (imeSwitchMode == enabled) return;
+        resetPendingGestures();
+        imeSwitchMode = enabled;
     }
 
     void setTriggerDelayMs(long delayMs) {
         triggerDelayMs = BridgeVisualPrefs.clampTriggerDelayMs((int) delayMs);
         gesture.setThresholdMs(triggerDelayMs);
+    }
+
+    private void resetPendingGestures() {
+        mainHandler.removeCallbacks(longPressRunnable);
+        gesture.onCancel();
+        tapGesture.cancel();
+        pendingTapAction = TAP_ACTION_NONE;
+        delayedTapTriggered = false;
     }
 
     private void applyWaveformState() {
@@ -142,7 +160,7 @@ final class BottomCaptureStripView extends View {
         if (event == null) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (tapToToggleRecording) {
+                if (tapToToggleRecording && !imeSwitchMode) {
                     tapGesture.onDown(event.getX(), event.getY());
                     pendingTapAction = tapAction(captureStatus);
                     delayedTapTriggered = false;
@@ -173,7 +191,7 @@ final class BottomCaptureStripView extends View {
                 }
                 return true;
             case MotionEvent.ACTION_MOVE:
-                if (tapToToggleRecording) {
+                if (tapToToggleRecording && !imeSwitchMode) {
                     tapGesture.onMove(
                         event.getX(),
                         event.getY(),
@@ -186,7 +204,7 @@ final class BottomCaptureStripView extends View {
                 if (!gesture.isPending()) mainHandler.removeCallbacks(longPressRunnable);
                 return true;
             case MotionEvent.ACTION_UP:
-                if (tapToToggleRecording) {
+                if (tapToToggleRecording && !imeSwitchMode) {
                     mainHandler.removeCallbacks(longPressRunnable);
                     if (!delayedTapTriggered &&
                         event.getEventTime() - downTimeMs >= triggerDelayMs &&
@@ -212,7 +230,7 @@ final class BottomCaptureStripView extends View {
                 downTimeMs = 0L;
                 return true;
             case MotionEvent.ACTION_CANCEL:
-                if (tapToToggleRecording) {
+                if (tapToToggleRecording && !imeSwitchMode) {
                     mainHandler.removeCallbacks(longPressRunnable);
                     tapGesture.cancel();
                     pendingTapAction = TAP_ACTION_NONE;
@@ -347,6 +365,7 @@ final class BottomCaptureStripView extends View {
     }
 
     private void dispatchTapAction(int action) {
+        if (imeSwitchMode) return;
         if (action == TAP_ACTION_START && listener != null) {
             listener.onCaptureHoldStarted();
         } else if (action == TAP_ACTION_FINISH && listener != null) {

@@ -308,6 +308,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         appliedConfigInitialized = true;
         XposedBridge.log(TAG + ": applied visual prefs host=" + config.hostTarget +
             " showRecordingArea=" + config.showRecordingArea +
+            " longPressSwitchIme=" + config.longPressSwitchIme +
             " showWaveformOnlyWhileRecording=" + config.showWaveformOnlyWhileRecording +
             " tapToToggleRecording=" + config.tapToToggleRecording +
             " size=" + config.widthDp + "x" + config.heightDp);
@@ -724,6 +725,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         private final String packageName;
         private final ImeWindowCaptureHost host;
         private final BridgeCaptureCoordinator coordinator;
+        private BridgeVisualPrefs.VisualConfig visualConfig = BridgeVisualPrefs.defaults();
         private BridgeCaptureStatus hostStatus = BridgeCaptureStatus.unsupported("not attached");
         private BridgeCaptureStatus captureStatus = BridgeCaptureStatus.unsupported("not attached");
 
@@ -740,7 +742,11 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         }
 
         void setVisualConfig(BridgeVisualPrefs.VisualConfig visualConfig) {
-            host.setVisualConfig(visualConfig);
+            this.visualConfig = visualConfig != null ? visualConfig : BridgeVisualPrefs.defaults();
+            host.setVisualConfig(this.visualConfig);
+            if (this.visualConfig.longPressSwitchIme) {
+                coordinator.cancelActiveCapture("ime switch mode");
+            }
         }
 
         void attachLater() {
@@ -781,17 +787,25 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
 
         @Override
         public void onCaptureHoldStarted() {
+            if (visualConfig != null && visualConfig.longPressSwitchIme) return;
             coordinator.startCapture();
         }
 
         @Override
         public void onCaptureHoldReleased() {
+            if (visualConfig != null && visualConfig.longPressSwitchIme) return;
             coordinator.finishCapture();
         }
 
         @Override
         public void onCaptureHoldCancelled() {
+            if (visualConfig != null && visualConfig.longPressSwitchIme) return;
             coordinator.cancelActiveCapture("gesture cancelled");
+        }
+
+        @Override
+        public void onImeSwitchRequested() {
+            BridgeImeSwitcher.switchTo(serviceRef.get(), visualConfig.switchImeTargetId);
         }
 
         @Override

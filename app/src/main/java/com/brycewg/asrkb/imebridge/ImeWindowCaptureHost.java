@@ -150,10 +150,12 @@ final class ImeWindowCaptureHost {
         float density
     ) {
         if (strip == null || root == null || visualConfig == null) return;
-        strip.setShowWaveformOnlyWhileRecording(
-            visualConfig.showWaveformOnlyWhileRecording
+        boolean imeSwitchMode = visualConfig.longPressSwitchIme;
+        strip.setImeSwitchMode(imeSwitchMode);
+        strip.setShowWaveformOnlyWhileRecording(visualConfig.hideIdleWaveform());
+        strip.setTapToToggleRecording(
+            !imeSwitchMode && visualConfig.tapToToggleRecording
         );
-        strip.setTapToToggleRecording(visualConfig.tapToToggleRecording);
         strip.setTriggerDelayMs(visualConfig.triggerDelayMs);
         FrameLayout.LayoutParams params = buildLayoutParams(root, visualConfig, density);
         lastStripHeightPx = params.height;

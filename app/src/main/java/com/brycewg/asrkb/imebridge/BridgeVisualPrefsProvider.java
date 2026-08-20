@@ -29,6 +29,12 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
     public static final String COLUMN_TAP_TO_TOGGLE_RECORDING =
         BridgeVisualPrefs.KEY_TAP_TO_TOGGLE_RECORDING;
     public static final String COLUMN_TRIGGER_DELAY_MS = BridgeVisualPrefs.KEY_TRIGGER_DELAY_MS;
+    public static final String COLUMN_LONG_PRESS_SWITCH_IME =
+        BridgeVisualPrefs.KEY_LONG_PRESS_SWITCH_IME;
+    public static final String COLUMN_SWITCH_IME_TARGET_ID =
+        BridgeVisualPrefs.KEY_SWITCH_IME_TARGET_ID;
+    public static final String COLUMN_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH =
+        BridgeVisualPrefs.KEY_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH;
     public static final String COLUMN_MODULE_VERSION = "module_version";
 
     private static final int CODE_CONFIG = 1;
@@ -61,6 +67,9 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             COLUMN_SHOW_WAVEFORM_ONLY_WHILE_RECORDING,
             COLUMN_TAP_TO_TOGGLE_RECORDING,
             COLUMN_TRIGGER_DELAY_MS,
+            COLUMN_LONG_PRESS_SWITCH_IME,
+            COLUMN_SWITCH_IME_TARGET_ID,
+            COLUMN_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH,
             COLUMN_MODULE_VERSION
         });
         cursor.addRow(new Object[] {
@@ -71,6 +80,9 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             config.showWaveformOnlyWhileRecording ? 1 : 0,
             config.tapToToggleRecording ? 1 : 0,
             config.triggerDelayMs,
+            config.longPressSwitchIme ? 1 : 0,
+            config.switchImeTargetId,
+            config.hideIdleWaveformInImeSwitch ? 1 : 0,
             BridgeContract.MODULE_VERSION
         });
         return cursor;
@@ -112,6 +124,10 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
         int triggerDelayMs = cursor.getInt(
             cursor.getColumnIndexOrThrow(COLUMN_TRIGGER_DELAY_MS)
         );
+        boolean longPressSwitchIme = optionalBoolean(cursor, COLUMN_LONG_PRESS_SWITCH_IME);
+        String switchImeTargetId = optionalString(cursor, COLUMN_SWITCH_IME_TARGET_ID);
+        boolean hideIdleWaveformInImeSwitch =
+            optionalBoolean(cursor, COLUMN_HIDE_IDLE_WAVEFORM_IN_IME_SWITCH);
         return new BridgeVisualPrefs.VisualConfig(
             width,
             height,
@@ -119,7 +135,22 @@ public final class BridgeVisualPrefsProvider extends ContentProvider {
             show,
             recordingOnly,
             tapToToggle,
-            triggerDelayMs
+            triggerDelayMs,
+            longPressSwitchIme,
+            switchImeTargetId,
+            hideIdleWaveformInImeSwitch
         );
+    }
+
+    private static boolean optionalBoolean(Cursor cursor, String column) {
+        int index = cursor.getColumnIndex(column);
+        return index >= 0 && cursor.getInt(index) != 0;
+    }
+
+    private static String optionalString(Cursor cursor, String column) {
+        int index = cursor.getColumnIndex(column);
+        if (index < 0) return "";
+        String value = cursor.getString(index);
+        return value == null ? "" : value;
     }
 }
