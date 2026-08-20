@@ -3,3 +3,4 @@
 -keep class com.brycewg.asrkb.imebridge.BridgeVisualPrefs { *; }
 -keep class com.brycewg.asrkb.imebridge.BridgeVisualPrefs$VisualConfig { *; }
 -keep class com.brycewg.asrkb.imebridge.BridgeContract { *; }
+-keep class com.brycewg.asrkb.imebridge.BridgeVisualSettingsActivity { *; }
