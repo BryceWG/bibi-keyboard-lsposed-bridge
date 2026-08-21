@@ -31,8 +31,8 @@ android {
         applicationId = "com.brycewg.asrkb.imebridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.3.3"
+        versionCode = 23
+        versionName = "0.3.4"
     }
 
     signingConfigs {
