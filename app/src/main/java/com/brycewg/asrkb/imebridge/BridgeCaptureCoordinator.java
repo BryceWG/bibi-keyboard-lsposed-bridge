@@ -26,6 +26,10 @@ final class BridgeCaptureCoordinator {
         OperationResult finish(String sessionId);
         OperationResult cancel(String sessionId);
         void close();
+
+        default void onBridgeTerminal(String sessionId) {
+            close();
+        }
     }
 
     interface AudioRecorder {
@@ -239,6 +243,10 @@ final class BridgeCaptureCoordinator {
         if (ownsExecutor && executor instanceof ExecutorService) {
             ((ExecutorService) executor).shutdown();
         }
+    }
+
+    void onBridgeTerminal(String sessionId) {
+        sessionClient.onBridgeTerminal(sessionId);
     }
 
     private void beginAndStartRecorder() {

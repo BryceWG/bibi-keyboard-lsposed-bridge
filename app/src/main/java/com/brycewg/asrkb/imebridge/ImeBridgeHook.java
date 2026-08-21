@@ -451,6 +451,14 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
         return service == null ? null : CAPTURE_RUNTIMES.get(service);
     }
 
+    private static synchronized void notifyBridgeTerminal(
+        InputMethodService service,
+        String sessionId
+    ) {
+        CaptureRuntime runtime = getCaptureRuntime(service);
+        if (runtime != null) runtime.onBridgeTerminal(sessionId);
+    }
+
     private static IntentFilter createBridgeIntentFilter() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(BridgeContract.ACTION_QUERY_STATUS);
@@ -769,6 +777,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             host.detach();
         }
 
+        void onBridgeTerminal(String sessionId) {
+            coordinator.onBridgeTerminal(sessionId);
+        }
+
         boolean supportsPcmRecording() {
             boolean hostReady = hostStatus.supportsPcmRecording() ||
                 (host.isAttached() && isTransientHostUnsupported(hostStatus));
@@ -1054,6 +1066,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             } else {
                 finish(BridgeContract.RESULT_COMPOSING_FAILED, "cancel composing failed");
             }
+            notifyBridgeTerminal(service, sessionId);
         }
 
         private void handleInsertText(Intent intent) {
@@ -1113,6 +1126,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 activeSessionEditorGeneration = 0L;
             }
             finish(ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMMIT_FAILED, ok ? "ok" : "commit failed");
+            notifyBridgeTerminal(service, sessionId);
         }
 
         private void handleSetComposingText(Intent intent) {

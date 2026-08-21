@@ -22,6 +22,7 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
     private IBinder binder;
     private ServiceConnection connection;
     private String activeSessionId;
+    private String finishingSessionId;
 
     BridgePcmSessionClient(Context context) {
         this.context = context == null ? null : context.getApplicationContext();
@@ -36,9 +37,25 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
             );
         }
         BridgeCaptureCoordinator.OperationResult last = null;
+        if (binder != null) {
+            BridgeCaptureCoordinator.OperationResult existing = transactString(
+                BridgeContract.PCM_TRANSACTION_BEGIN,
+                sessionId
+            );
+            if (existing.isSuccess()) {
+                finishingSessionId = null;
+                activeSessionId = sessionId;
+                return existing;
+            }
+            if (existing.code == BridgeContract.PCM_RESULT_BUSY) {
+                return existing;
+            }
+            unbind();
+        } else if (connection != null) {
+            unbind();
+        }
         String[] hostPackages = BridgeHostRouting.packages();
         for (String appPackage : hostPackages) {
-            unbind();
             BridgeCaptureCoordinator.OperationResult bound = bindTo(appPackage);
             if (!bound.isSuccess()) {
                 last = bound;
@@ -119,7 +136,11 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
             sessionId
         );
         activeSessionId = null;
-        unbind();
+        if (result.isSuccess()) {
+            finishingSessionId = sessionId;
+        } else {
+            unbind();
+        }
         return result;
     }
 
@@ -140,7 +161,16 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
     @Override
     public synchronized void close() {
         activeSessionId = null;
+        if (finishingSessionId != null) return;
         unbind();
+    }
+
+    @Override
+    public synchronized void onBridgeTerminal(String sessionId) {
+        if (finishingSessionId == null || !finishingSessionId.equals(sessionId)) return;
+        // The terminal broadcast means the asynchronous final path has completed.
+        // Keep the service bound so the next session does not tear it down first.
+        finishingSessionId = null;
     }
 
     private boolean isActiveSession(String sessionId) {
@@ -197,9 +227,11 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
                 boolean hadActiveSession;
                 synchronized (BridgePcmSessionClient.this) {
                     if (connection != this) return;
-                    hadActiveSession = activeSessionId != null;
+                    hadActiveSession = activeSessionId != null || finishingSessionId != null;
                     binder = null;
                     activeSessionId = null;
+                    finishingSessionId = null;
+                    connection = null;
                 }
                 if (hadActiveSession) {
                     BridgeUserNotifier.show(context, R.string.bridge_toast_connection_failed);
@@ -307,5 +339,6 @@ final class BridgePcmSessionClient implements BridgeCaptureCoordinator.SessionCl
         }
         connection = null;
         binder = null;
+        finishingSessionId = null;
     }
 }
