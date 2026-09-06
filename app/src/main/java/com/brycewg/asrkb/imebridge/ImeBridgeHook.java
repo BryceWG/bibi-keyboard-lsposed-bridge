@@ -16,6 +16,7 @@ import android.inputmethodservice.InputMethodService;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.os.SystemClock;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
@@ -148,6 +149,8 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 EDITOR_GENERATION.incrementAndGet();
                 resetBridgeReceiverPreview(service);
                 cancelCaptureRuntime(service, "finish input");
+                imeWindowVisible = false;
+                sendImeWindowVisibility(service, resolveHostPackage(service), false);
                 activeEditorInfo = null;
                 activeEditorIdentity = null;
                 sendEditorLifecycle(
@@ -224,6 +227,7 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                     activeEditorInfo = null;
                     activeEditorIdentity = null;
                     imeWindowVisible = false;
+                    sendImeWindowVisibility(service, resolveHostPackage(service), false);
                 }
             }
         });
@@ -457,6 +461,16 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
     ) {
         CaptureRuntime runtime = getCaptureRuntime(service);
         if (runtime != null) runtime.onBridgeTerminal(sessionId);
+    }
+
+    private static synchronized int registeredReceiverCount(InputMethodService service) {
+        List<BridgeReceiver> receivers = service == null ? null : RECEIVERS.get(service);
+        return receivers == null ? 0 : receivers.size();
+    }
+
+    private static String shortId(String value) {
+        if (value == null) return "none";
+        return value.length() <= 8 ? value : value.substring(0, 8);
     }
 
     private static IntentFilter createBridgeIntentFilter() {
@@ -1099,7 +1113,10 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
             }
 
             int cursorPosition = intent.getIntExtra(BridgeContract.EXTRA_CURSOR_POSITION, 1);
+            // 有序广播的结果只在 onReceive 返回时交出，所以这里每一段耗时都会计入应用侧的 insert 超时。
+            long commitStartedAtMs = SystemClock.uptimeMillis();
             boolean ok;
+            boolean viaPreview = composingPreviewActive;
             try {
                 if (composingPreviewActive) {
                     if (isComposingPreviewForActiveEditor()) {
@@ -1121,12 +1138,19 @@ public final class ImeBridgeHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + ": insert text failed: " + t);
                 ok = false;
             }
+            long terminalStartedAtMs = SystemClock.uptimeMillis();
             if (ok && sessionId != null && sessionId.length() > 0) {
                 activeSessionId = null;
                 activeSessionEditorGeneration = 0L;
             }
             finish(ok ? BridgeContract.RESULT_OK : BridgeContract.RESULT_COMMIT_FAILED, ok ? "ok" : "commit failed");
             notifyBridgeTerminal(service, sessionId);
+            // requestId 用于和应用侧 IME_BRIDGE 记录逐条对齐，receivers 用于检验同进程内接收器是否堆积。
+            XposedBridge.log(TAG + ": insert text req=" + shortId(intent.getStringExtra(BridgeContract.EXTRA_REQUEST_ID)) +
+                " preview=" + viaPreview +
+                " receivers=" + registeredReceiverCount(service) +
+                " commitMs=" + (terminalStartedAtMs - commitStartedAtMs) +
+                " terminalMs=" + (SystemClock.uptimeMillis() - terminalStartedAtMs));
         }
 
         private void handleSetComposingText(Intent intent) {
